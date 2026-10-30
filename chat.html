@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pergunte aos dados de diálise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+/* Layout: uma coluna de leitura (máx. 52rem), cabeçalho curto, conversa, caixa de pergunta fixa no rodapé da coluna */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --ink: #1c2321; --muted: #5d6a66; --line: #dde2df;
+  --accent: #0f6e63; --accent-soft: #e3f1ee; --user: #eef1f6; --warn: #8a5a00; --bad: #a3322a;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121615; --panel: #1a201e; --ink: #e6ebe9; --muted: #9aa7a3; --line: #2c3532;
+  --accent: #5cc2b2; --accent-soft: #1d3330; --user: #1f2630; --warn: #e0b45c; --bad: #ef8a80; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121615; --panel: #1a201e; --ink: #e6ebe9; --muted: #9aa7a3; --line: #2c3532;
+  --accent: #5cc2b2; --accent-soft: #1d3330; --user: #1f2630; --warn: #e0b45c; --bad: #ef8a80; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.app { max-width: 52rem; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; gap: 18px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 0; }
+header h1 { font-family: var(--font-display); font-weight: 500; font-size: clamp(1.7rem, 4vw, 2.2rem); line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+header .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+header .meta a { color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 13.5px; text-align: left; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.rotulo { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.conversa { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+.msg { min-width: 0; }
+.msg.user { align-self: flex-end; max-width: 85%; background: var(--user); border-radius: var(--r) var(--r) 2px var(--r); padding: 10px 14px; white-space: pre-wrap; }
+.msg.bot { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
+.msg.bot .status { color: var(--muted); font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+.msg.bot .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulso 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .msg.bot .status::before { animation: none; } }
+@keyframes pulso { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
+.resp > :first-child { margin-top: 0; } .resp > :last-child { margin-bottom: 0; }
+.resp p { margin: 0 0 10px; }
+.resp h3, .resp h4 { font-size: 15px; font-weight: 600; margin: 14px 0 6px; }
+.resp ul, .resp ol { margin: 0 0 10px; padding-left: 1.3rem; }
+.resp li { margin: 2px 0; }
+.resp .tab { overflow-x: auto; margin: 8px 0 12px; border: 1px solid var(--line); border-radius: 8px; }
+.resp table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.resp th, .resp td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.resp th { font-weight: 600; background: var(--accent-soft); white-space: nowrap; }
+.resp tr:last-child td { border-bottom: 0; }
+.resp td.n, .resp th.n { text-align: right; }
+.resp code { font-family: var(--font-mono); font-size: 12.5px; }
+.erro { color: var(--bad); font-size: 13.5px; margin-top: 8px; }
+.aviso { color: var(--warn); font-size: 13.5px; margin-top: 8px; }
+details.consultas { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; color: var(--muted); }
+details.consultas summary { cursor: pointer; }
+details.consultas ol { margin: 6px 0 0; padding-left: 1.2rem; }
+details.consultas li { margin: 4px 0; font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
+details.consultas li span { font-family: var(--font-body); color: var(--ink); }
+.caixa { position: sticky; bottom: 0; background: linear-gradient(to bottom, transparent, var(--bg) 18px); padding: 18px 0 max(16px, env(safe-area-inset-bottom, 0px)); }
+.caixa form { display: flex; gap: 8px; align-items: flex-end; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+.caixa textarea { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: transparent; border: 0; resize: none; padding: 6px 8px; max-height: 9rem; outline: none; }
+.btn { font: inherit; font-weight: 500; font-size: 14px; border-radius: 10px; border: 1px solid transparent; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+.btn.prim { background: var(--accent); color: var(--bg); }
+.btn.sec { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus-visible, .chip:focus-visible, .caixa form:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.caixa .rodape { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; padding: 0 4px; }
+.caixa .rodape button { font: inherit; color: var(--muted); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.indisp { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; color: var(--muted); }
+.codigo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.codigo input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 0; flex: 1 1 12rem; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Pergunte aos dados de diálise</h1>
+    <p>Faça perguntas em português sobre a terapia renal substitutiva no SUS. As respostas são calculadas a partir das APACs de diálise do DATASUS e do CNES, de ago/2024 a jul/2026, e mostram as consultas usadas.</p>
+    <div class="meta">
+      <span id="meta-dados">Carregando dados…</span>
+      <a href="index.html">Abrir o painel</a>
+    </div>
+  </header>
+
+  <section id="exemplos" aria-labelledby="rot-ex">
+    <p class="rotulo" id="rot-ex">Experimente</p>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <form class="codigo" id="form-codigo" hidden>
+    <label for="codigo">Código de acesso</label>
+    <input id="codigo" type="password" autocomplete="off" placeholder="Informe o código recebido">
+    <button class="btn prim" type="submit">Entrar</button>
+  </form>
+
+  <section class="conversa" id="conversa" aria-live="polite"></section>
+
+  <div class="caixa">
+    <form id="form">
+      <label for="pergunta" class="rotulo" style="position:absolute;left:-9999px">Sua pergunta</label>
+      <textarea id="pergunta" rows="1" placeholder="Ex.: quais estados têm mais pacientes tratados fora do município?"></textarea>
+      <button class="btn sec" id="parar" type="button" hidden>Parar</button>
+      <button class="btn prim" id="enviar" type="submit">Perguntar</button>
+    </form>
+    <div class="rodape">
+      <span>Responde só com o que está nos dados. Respostas geradas pelo Claude (Anthropic).</span>
+      <button type="button" id="limpar">Nova conversa</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ------------------------------------------------------------ formatação
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const fmtMes = (m) => MESES[+String(m).slice(4, 6) - 1] + '/' + String(m).slice(0, 4);
+  const UFS = { AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso', PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco', PI: 'Piauí', PR: 'Paraná', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima', RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'São Paulo', TO: 'Tocantins' };
+  const COD_UF = { 11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO', 21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA', 31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP', 41: 'PR', 42: 'SC', 43: 'RS', 50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF' };
+  const MODS = ['Hemodiálise', 'Hemodiálise – sorologia positiva', 'Hemodiálise pediátrica', 'Diálise peritoneal (DPA/DPAC)', 'Diálise peritoneal intermitente', 'Outros'];
+  const NUM = ['apacs', 'pacientes', 'valor', 'novos', 'obitos', 'transferencias', 'altas', 'encerramentos', 'fora_mun', 'fora_rs', 'dist_soma', 'dist_n', 'dist_50', 'interc_s', 'interc_n', 'peri_s', 'peri_n', 'fav', 'cat_curta', 'cat_longa', 'apto', 'inapto', 'recusa', 'na90', 'cncdo', 'avaliacao', 'sem_encam', 'aguard_consulta', 'hb_ok', 'hb_n', 'ktv_ok', 'ktv_n', 'alb_ok', 'alb_n', 'fos_ok', 'fos_n', 'hiv_p', 'hcv_p', 'hbs_p', 'sor_n', 'aut_soma', 'aut_n', 'nefro_s', 'nefro_n'];
+  const sem = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const isHD = (m) => m.startsWith('Hemodiálise');
+  const r1 = (v) => (v == null || !isFinite(v) ? null : Math.round(v * 10) / 10);
+  const r0 = (v) => (v == null || !isFinite(v) ? null : Math.round(v));
+  const pc = (a, b) => (b > 0 ? Math.round((1000 * a) / b) / 10 : null); // percentual com 1 casa
+
+  // ------------------------------------------------------------ leitura de arquivos
+  function parseCSV(txt) {
+    const linhas = []; let campo = '', linha = [], aspas = false;
+    for (let i = 0; i < txt.length; i++) {
+      const c = txt[i];
+      if (aspas) { if (c === '"') { if (txt[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c; }
+      else if (c === '"') aspas = true;
+      else if (c === ',') { linha.push(campo); campo = ''; }
+      else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+      else if (c !== '\r') campo += c;
+    }
+    if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+    const cab = linhas.shift();
+    return linhas.filter((l) => l.length === cab.length).map((l) => Object.fromEntries(cab.map((k, i) => [k, l[i]])));
+  }
+  const buscar = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('Não foi possível ler ' + url); return r; };
+
+  const D = { brasil: null, cap: null, mun: null, uf: new Map(), meses: [], padrao: null, incompletos: [] };
+  async function carregarBase() {
+    const [b, c] = await Promise.all([buscar('dados/brasil.csv').then((r) => r.text()), buscar('dados/brasil_ufs.csv').then((r) => r.text())]);
+    D.brasil = parseCSV(b).map((r) => {
+      const o = { uf: r.uf, mes: String(r.mes), mod: r.modalidade, nj: r.natjur_grupo, gest: r.gestao };
+      for (const k of NUM) o[k] = +r[k] || 0;
+      return o;
+    });
+    D.cap = new Map(parseCSV(c).map((u) => [u.uf, { cap: +u.cap_hd || 0, n: +u.n_clinicas || 0, maq: +u.maq_hd_uso || 0, comMaq: +u.clinicas_com_maquina || 0 }]));
+    D.meses = [...new Set(D.brasil.map((r) => r.mes))].sort();
+    const ult = D.meses.at(-1), pen = D.meses.at(-2);
+    const t = new Map();
+    for (const r of D.brasil) { const k = r.uf; if (!t.has(k)) t.set(k, {}); const o = t.get(k); o[r.mes] = (o[r.mes] || 0) + r.pacientes; }
+    D.incompletos = [...t].filter(([, o]) => o[pen] > 0 && (o[ult] || 0) / o[pen] < 0.85).map(([u]) => u).sort();
+    D.padrao = D.incompletos.length ? pen : ult;
+  }
+  async function municipios() {
+    if (!D.mun) {
+      const rows = parseCSV(await buscar('dados/municipios.csv').then((r) => r.text()));
+      D.mun = new Map(rows.map((m) => [String(m.cod), { nome: m.nome, rs: m.rs || null, rs_nome: m.rs_nome || null, lat: m.lat === '' ? NaN : +m.lat, lon: m.lon === '' ? NaN : +m.lon, uf: COD_UF[m.uf] || m.uf }]));
+    }
+    return D.mun;
+  }
+  const arr = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? JSON.parse(v) : []);
+  async function dadosUF(uf) {
+    if (D.uf.has(uf)) return D.uf.get(uf);
+    const [json, mun] = await Promise.all([buscar(`dados/uf/${uf}.json`).then((r) => r.json()), municipios()]);
+    const linhas = json.rows || [];
+    const h = linhas.find((l) => l.t === 'h'); const cols = arr(h.mensal_cols), mods = arr(h.modalidades);
+    const cliArr = [];
+    for (const l of linhas) if (l.t === 'c') cliArr[+l.i] = { cnes: String(l.cnes).padStart(7, '0'), nome: l.nome, mun: String(l.mun), mun_nome: l.mun_nome, rs: l.rs ? String(l.rs) : null, rs_nome: l.rs_nome || '—', nj: l.natjur_grupo, gest: l.gestao, hab: arr(l.hab), cap: +l.cap_hd || 0, maq: +l.hd_amb_uso || 0, lat: +l.lat, lon: +l.lon };
+    const rows = [], flx = [];
+    for (const l of linhas) {
+      if (l.t === 'm') {
+        const v = arr(l.v), c = cliArr[v[1]];
+        const o = { uf, mes: String(v[0]), cnes: c.cnes, mod: mods[v[2]], nj: c.nj, gest: c.gest, rs: c.rs_nome, mun: c.mun_nome };
+        for (let k = 3; k < cols.length; k++) o[cols[k]] = +v[k] || 0;
+        rows.push(o);
+      } else if (l.t === 'f') { const v = arr(l.v); flx.push({ mes: String(v[0]), res: String(v[1]), cnes: cliArr[v[2]].cnes, pac: +v[3] || 0 }); }
+    }
+    const cli = new Map(cliArr.filter(Boolean).map((c) => [c.cnes, c]));
+    const R = 6371, rad = Math.PI / 180;
+    for (const f of flx) {
+      const c = cli.get(f.cnes), m = mun.get(f.res);
+      if (c && c.mun === f.res) f.dist = 0;
+      else if (c && m && isFinite(m.lat) && isFinite(c.lat)) {
+        const dphi = (c.lat - m.lat) * rad, dl = (c.lon - m.lon) * rad;
+        f.dist = 2 * R * Math.asin(Math.sqrt(Math.sin(dphi / 2) ** 2 + Math.cos(m.lat * rad) * Math.cos(c.lat * rad) * Math.sin(dl / 2) ** 2));
+      } else f.dist = NaN;
+    }
+    const o = { uf, cli, rows, flx };
+    D.uf.set(uf, o);
+    return o;
+  }
+
+  // ------------------------------------------------------------ consultas (ferramentas)
+  const INDICADORES = {
+    pacientes: 'Pacientes distintos por mês (média mensal se o período tiver vários meses)',
+    casos_novos: 'Casos novos: 1ª diálise no mês (soma no período)',
+    obitos: 'Óbitos registrados na APAC (soma)', transferencias: 'Transferências (soma)', altas: 'Altas, inclusive por transplante (soma)',
+    valor_aprovado: 'Valor aprovado das APACs em R$ (soma)',
+    pct_fora_municipio: '% tratados fora do município de residência', pct_fora_regiao: '% tratados fora da região de saúde de residência',
+    distancia_media_km: 'Distância média em linha reta entre municípios (km)', pct_mais_50km: '% a mais de 50 km',
+    pct_fav: '% com fístula arteriovenosa (só hemodiálise)', pct_cateter_curta: '% com cateter de curta permanência (só hemodiálise)',
+    pct_hb_meta: '% hemoglobina ≥ 10 g/dL (entre informados)', pct_ktv_meta: '% Kt/V ≥ 1,2 (entre informados)', pct_albumina_meta: '% albumina ≥ 3,5 g/dL', pct_fosforo_meta: '% fósforo 3,5–5,5 mg/dL',
+    pct_preench_ktv: '% das APACs com Kt/V informado', pct_preench_hb: '% das APACs com hemoglobina informada',
+    pct_internacao: '% com internação por intercorrência no mês', pct_peritonite: '% com peritonite no mês (só diálise peritoneal)', pct_hcv: '% anti-HCV positivo', pct_hbsag: '% HBsAg positivo', pct_hiv: '% HIV positivo',
+    pct_aptos_transplante: '% aptos a transplante', pct_aptos_inscritos: '% dos aptos inscritos na lista (CNCDO)', pct_aptos_sem_encaminhamento: '% dos aptos sem encaminhamento', pct_recusa_transplante: '% que recusaram transplante',
+    dias_autorizacao: 'Média de dias entre solicitação e autorização da APAC (casos novos)',
+    estabelecimentos: 'Nº de estabelecimentos com APAC', estabelecimentos_com_maquina: 'Nº de estabelecimentos com máquina de hemodiálise registrada no CNES', capacidade_hd: 'Capacidade estimada de hemodiálise (máquinas em uso × 6), CNES jul/2026', maquinas_hd: 'Máquinas de hemodiálise ambulatoriais em uso', ocupacao_hd: '% ocupação estimada da hemodiálise (pacientes HD ÷ capacidade)',
+  };
+  const AGRUP = ['uf', 'mes', 'modalidade', 'natureza', 'gestao', 'estabelecimento', 'regiao_saude', 'municipio_estabelecimento'];
+
+  function calcular(g, ctx) {
+    const nm = ctx.nMeses || 1, acc = g.fav + g.cat_curta + g.cat_longa, sit = g.apto + g.inapto + g.recusa + g.na90;
+    return {
+      pacientes: r0(g.pacientes / nm), casos_novos: g.novos, obitos: g.obitos, transferencias: g.transferencias, altas: g.altas, valor_aprovado: r0(g.valor),
+      pct_fora_municipio: pc(g.fora_mun, g.apacs), pct_fora_regiao: pc(g.fora_rs, g.apacs), distancia_media_km: g.dist_n ? r1(g.dist_soma / g.dist_n) : null, pct_mais_50km: pc(g.dist_50, g.dist_n),
+      pct_fav: pc(g.fav, acc), pct_cateter_curta: pc(g.cat_curta, acc), pct_hb_meta: pc(g.hb_ok, g.hb_n), pct_ktv_meta: pc(g.ktv_ok, g.ktv_n), pct_albumina_meta: pc(g.alb_ok, g.alb_n), pct_fosforo_meta: pc(g.fos_ok, g.fos_n),
+      pct_preench_ktv: pc(g.ktv_n, g.apacs), pct_preench_hb: pc(g.hb_n, g.apacs),
+      pct_internacao: pc(g.interc_s, g.interc_n), pct_peritonite: pc(g.peri_s, g.peri_n), pct_hcv: pc(g.hcv_p, g.sor_n), pct_hbsag: pc(g.hbs_p, g.sor_n), pct_hiv: pc(g.hiv_p, g.sor_n),
+      pct_aptos_transplante: pc(g.apto, sit), pct_aptos_inscritos: pc(g.cncdo, g.apto), pct_aptos_sem_encaminhamento: pc(g.sem_encam, g.apto), pct_recusa_transplante: pc(g.recusa, sit),
+      dias_autorizacao: g.aut_n ? r1(g.aut_soma / g.aut_n) : null,
+      estabelecimentos: ctx.est ?? null, estabelecimentos_com_maquina: ctx.comMaq ?? null, capacidade_hd: ctx.cap ?? null, maquinas_hd: ctx.maq ?? null,
+      ocupacao_hd: ctx.cap ? pc(ctx.hdCap / nm, ctx.cap) : null,
+    };
+  }
+  function periodo(a) {
+    let ini = String(a.mes_inicio || '').replace(/\D/g, ''), fim = String(a.mes_fim || '').replace(/\D/g, '');
+    if (!ini && !fim) ini = fim = D.padrao;
+    if (!ini) ini = fim; if (!fim) fim = ini;
+    if (ini > fim) [ini, fim] = [fim, ini];
+    const ms = D.meses.filter((m) => m >= ini && m <= fim);
+    if (!ms.length) throw new Error(`Período sem dados. Meses disponíveis: ${D.meses[0]} a ${D.meses.at(-1)} (AAAAMM).`);
+    return ms;
+  }
+  const casa = (txt, alvo) => !alvo || sem(txt).includes(sem(alvo));
+  function escolherMod(v) {
+    if (!v) return null;
+    const s = sem(v);
+    if (s.includes('peritoneal') || s === 'dp') return (m) => m.startsWith('Diálise peritoneal');
+    if (s === 'hemodialise' || s === 'hd') return (m) => isHD(m);
+    const exato = MODS.find((m) => sem(m) === s) || MODS.find((m) => sem(m).includes(s));
+    if (!exato) throw new Error('Modalidade desconhecida. Use: ' + MODS.join('; ') + '; ou "hemodiálise" / "diálise peritoneal" para o grupo todo.');
+    return (m) => m === exato;
+  }
+
+  async function consultar(a) {
+    const esc = String(a.escopo || 'BR').toUpperCase();
+    if (esc !== 'BR' && !UFS[esc]) throw new Error('escopo deve ser "BR" ou a sigla de uma UF.');
+    const meses = periodo(a); const setM = new Set(meses);
+    const agrup = (Array.isArray(a.agrupar_por) ? a.agrupar_por : a.agrupar_por ? [a.agrupar_por] : []).map(String).slice(0, 2);
+    for (const g of agrup) {
+      if (!AGRUP.includes(g)) throw new Error('agrupar_por aceita: ' + AGRUP.join(', '));
+      if (esc === 'BR' && ['estabelecimento', 'regiao_saude', 'municipio_estabelecimento'].includes(g)) throw new Error(`Para agrupar por ${g}, use escopo com a sigla da UF.`);
+    }
+    const f = a.filtros || {};
+    const modOk = escolherMod(f.modalidade);
+    const ufsF = f.ufs ? (Array.isArray(f.ufs) ? f.ufs : [f.ufs]).map((u) => String(u).toUpperCase()) : null;
+    let rows, U = null;
+    if (esc === 'BR') rows = D.brasil;
+    else { U = await dadosUF(esc); rows = U.rows; }
+    const est = f.estabelecimento ? String(f.estabelecimento) : null;
+    const F = rows.filter((r) => setM.has(r.mes) && (!modOk || modOk(r.mod)) && (!ufsF || ufsF.includes(r.uf)) && casa(r.nj, f.natureza) && casa(r.gest, f.gestao)
+      && (!U || (casa(r.rs, f.regiao_saude) && casa(r.mun, f.municipio_estabelecimento) && (!est || r.cnes === est.padStart(7, '0') || casa(U.cli.get(r.cnes).nome, est)))));
+    const chave = (r) => agrup.map((g) => ({ uf: r.uf, mes: r.mes, modalidade: r.mod, natureza: r.nj, gestao: r.gest, estabelecimento: r.cnes, regiao_saude: r.rs, municipio_estabelecimento: r.mun })[g]).join('|');
+    const grupos = new Map();
+    for (const r of F) { const k = chave(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+    const pedidos = (Array.isArray(a.indicadores) && a.indicadores.length ? a.indicadores : ['pacientes', 'casos_novos', 'obitos', 'pct_fora_municipio']).map(String).filter((k) => k in INDICADORES);
+    let linhas = [...grupos].map(([k, rr]) => {
+      const g = {}; for (const n of NUM) g[n] = 0; for (const r of rr) for (const n of NUM) g[n] += r[n];
+      const nMeses = agrup.includes('mes') ? 1 : meses.length;
+      const ctx = { nMeses };
+      if (U) {
+        const ces = new Set(rr.map((r) => r.cnes)); ctx.est = ces.size; ctx.comMaq = [...ces].filter((c) => U.cli.get(c).cap > 0).length;
+        ctx.cap = [...ces].reduce((s, c) => s + U.cli.get(c).cap, 0); ctx.maq = [...ces].reduce((s, c) => s + U.cli.get(c).maq, 0);
+        ctx.hdCap = rr.filter((r) => isHD(r.mod) && U.cli.get(r.cnes).cap > 0).reduce((s, r) => s + r.pacientes, 0);
+      } else if (!agrup.some((g) => ['modalidade', 'natureza', 'gestao'].includes(g))) {
+        const ufs = new Set(rr.map((r) => r.uf));
+        ctx.cap = [...ufs].reduce((s, u) => s + (D.cap.get(u)?.cap || 0), 0); ctx.maq = [...ufs].reduce((s, u) => s + (D.cap.get(u)?.maq || 0), 0);
+        ctx.est = [...ufs].reduce((s, u) => s + (D.cap.get(u)?.n || 0), 0); ctx.comMaq = [...ufs].reduce((s, u) => s + (D.cap.get(u)?.comMaq || 0), 0);
+        ctx.hdCap = rr.filter((r) => isHD(r.mod)).reduce((s, r) => s + r.pacientes, 0);
+      }
+      const ind = calcular(g, ctx);
+      const linha = {};
+      const partes = k.split('|');
+      agrup.forEach((gname, i) => {
+        if (gname === 'estabelecimento') { const c = U.cli.get(partes[i]); linha.cnes = c.cnes; linha.estabelecimento = c.nome; linha.municipio = c.mun_nome; }
+        else if (gname === 'uf') linha.uf = partes[i];
+        else if (gname === 'mes') linha.mes = partes[i];
+        else linha[gname] = partes[i];
+      });
+      for (const p of pedidos) linha[p] = ind[p];
+      return linha;
+    });
+    const ord = a.ordenar_por && pedidos.includes(a.ordenar_por) ? a.ordenar_por : agrup.includes('mes') ? null : pedidos[0];
+    if (ord) linhas.sort((x, y) => ((y[ord] ?? -Infinity) - (x[ord] ?? -Infinity)) * (a.ordem === 'asc' ? -1 : 1));
+    else linhas.sort((x, y) => String(x.mes).localeCompare(String(y.mes)));
+    const total = linhas.length, lim = Math.min(Math.max(+a.limite || 30, 1), 60);
+    linhas = linhas.slice(0, lim);
+    const obs = [];
+    if (meses.includes(D.meses.at(-1)) && D.incompletos.length && (esc === 'BR' || D.incompletos.includes(esc))) obs.push(`${fmtMes(D.meses.at(-1))} está incompleto em: ${D.incompletos.join(', ')}.`);
+    if (esc === 'BR' && pedidos.includes('ocupacao_hd')) {
+      obs.push('Ocupação no nível Brasil/UF é aproximada (todos os pacientes HD da UF ÷ capacidade da UF).');
+      const falt = [...new Set(F.map((r) => r.uf))].filter((u) => { const c = D.cap.get(u); return c && c.comMaq < c.n; }).map((u) => `${u} (${D.cap.get(u).comMaq} de ${D.cap.get(u).n})`);
+      if (falt.length) obs.push('Em algumas UFs nem todos os estabelecimentos têm máquina registrada no CNES, o que subestima a capacidade e pode levar a ocupação acima de 100%: ' + falt.join(', ') + '. Trate esses valores como indicativo de cadastro incompleto, não de superlotação.');
+    }
+    if (esc !== 'BR' && pedidos.includes('ocupacao_hd')) obs.push('Ocupação considera só estabelecimentos com máquina registrada no CNES.');
+    if (esc === 'BR' && agrup.some((g) => ['modalidade', 'natureza', 'gestao'].includes(g)) && pedidos.some((p) => ['capacidade_hd', 'ocupacao_hd', 'maquinas_hd', 'estabelecimentos'].includes(p))) obs.push('Capacidade e estabelecimentos não estão disponíveis quando agrupado por modalidade, natureza ou gestão no escopo Brasil.');
+    if (pedidos.some((p) => /hb|ktv|albumina|fosforo/.test(p)) && !pedidos.some((p) => p.startsWith('pct_preench'))) obs.push('Exames têm preenchimento variável por UF; peça pct_preench_ktv / pct_preench_hb para avaliar.');
+    return { escopo: esc, periodo: [meses[0], meses.at(-1)], n_meses: meses.length, agrupado_por: agrup, filtros: f, total_linhas: total, linhas, observacoes: obs };
+  }
+
+  async function residencia(a) {
+    const uf = String(a.uf || '').toUpperCase();
+    if (!UFS[uf]) throw new Error('Informe uf (sigla) — os fluxos de residência são por estado do estabelecimento.');
+    const mes = periodo({ mes_inicio: a.mes, mes_fim: a.mes }).at(-1);
+    const U = await dadosUF(uf), mun = await municipios();
+    const g = String(a.agrupar_por || 'municipio_residencia');
+    const opts = ['municipio_residencia', 'regiao_residencia', 'uf_residencia', 'estabelecimento'];
+    if (!opts.includes(g)) throw new Error('agrupar_por aceita: ' + opts.join(', '));
+    const f = a.filtros || {};
+    const fl = U.flx.filter((x) => {
+      if (x.mes !== mes) return false;
+      const c = U.cli.get(x.cnes), m = mun.get(x.res);
+      if (f.estabelecimento && !(c.cnes === String(f.estabelecimento).padStart(7, '0') || casa(c.nome, f.estabelecimento))) return false;
+      if (f.regiao_saude_estabelecimento && !casa(c.rs_nome, f.regiao_saude_estabelecimento)) return false;
+      if (f.municipio_residencia && !casa(m?.nome, f.municipio_residencia)) return false;
+      if (f.regiao_residencia && !casa(m?.rs_nome, f.regiao_residencia)) return false;
+      return true;
+    });
+    const grupos = new Map();
+    for (const x of fl) {
+      const m = mun.get(x.res), c = U.cli.get(x.cnes);
+      const k = g === 'municipio_residencia' ? x.res : g === 'regiao_residencia' ? (m?.rs_nome || 'Ignorada') : g === 'uf_residencia' ? (m?.uf || '?') : x.cnes;
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push({ ...x, m, c });
+    }
+    let linhas = [...grupos].map(([k, v]) => {
+      const pac = v.reduce((s, x) => s + x.pac, 0), vd = v.filter((x) => isFinite(x.dist)), pd = vd.reduce((s, x) => s + x.pac, 0);
+      const o = {};
+      if (g === 'municipio_residencia') { const m = mun.get(k); o.municipio_residencia = m?.nome || k; o.uf_residencia = m?.uf; o.regiao_residencia = m?.rs_nome; }
+      else if (g === 'estabelecimento') { const c = U.cli.get(k); o.cnes = c.cnes; o.estabelecimento = c.nome; o.municipio_estabelecimento = c.mun_nome; }
+      else o[g] = k;
+      o.pacientes = pac;
+      o.pct_fora_municipio = pc(v.reduce((s, x) => s + (x.c.mun !== x.res ? x.pac : 0), 0), pac);
+      o.pct_fora_regiao = pc(v.reduce((s, x) => s + (x.m && x.m.rs && x.c.rs && x.m.rs !== x.c.rs ? x.pac : 0), 0), pac);
+      o.distancia_media_km = pd ? r1(vd.reduce((s, x) => s + x.dist * x.pac, 0) / pd) : null;
+      o.pacientes_mais_50km = vd.filter((x) => x.dist > 50).reduce((s, x) => s + x.pac, 0);
+      if (g !== 'estabelecimento') {
+        const porC = new Map(); for (const x of v) porC.set(x.cnes, (porC.get(x.cnes) || 0) + x.pac);
+        const top = [...porC].sort((p, q) => q[1] - p[1])[0];
+        if (top) { const c = U.cli.get(top[0]); o.estabelecimento_mais_usado = `${c.nome} (${c.mun_nome})`; }
+      }
+      return o;
+    });
+    const ord = ['pacientes', 'pct_fora_municipio', 'pct_fora_regiao', 'distancia_media_km', 'pacientes_mais_50km'].includes(a.ordenar_por) ? a.ordenar_por : 'pacientes';
+    linhas.sort((x, y) => (y[ord] ?? -1) - (x[ord] ?? -1));
+    const total = linhas.length, lim = Math.min(Math.max(+a.limite || 25, 1), 60);
+    return { uf_estabelecimento: uf, mes, agrupado_por: g, filtros: f, total_linhas: total, total_pacientes: linhas.reduce((s, x) => s + x.pacientes, 0), linhas: linhas.slice(0, lim),
+      observacoes: ['Pacientes atendidos por estabelecimentos desta UF; residentes desta UF tratados em outro estado não aparecem.', 'Distância em linha reta entre centros de municípios.'] };
+  }
+
+  async function listar(a) {
+    const t = String(a.tipo || '');
+    const busca = a.busca ? String(a.busca) : '';
+    if (t === 'meses') return { meses: D.meses, mes_padrao: D.padrao, ultimo_mes_incompleto_em: D.incompletos };
+    if (t === 'ufs') return Object.entries(UFS).map(([s, n]) => ({ sigla: s, nome: n }));
+    if (t === 'modalidades') return MODS.slice(0, 5);
+    if (t === 'naturezas') return ['Público', 'Privado (empresarial)', 'Sem fins lucrativos'];
+    if (t === 'indicadores') return INDICADORES;
+    const uf = String(a.uf || '').toUpperCase();
+    if (!UFS[uf]) throw new Error('Para esse tipo, informe uf (sigla).');
+    const U = await dadosUF(uf);
+    const clis = [...U.cli.values()];
+    if (t === 'regioes_saude') return [...new Set(clis.map((c) => c.rs_nome))].filter((x) => casa(x, busca)).sort();
+    if (t === 'municipios_com_estabelecimento') return [...new Set(clis.map((c) => c.mun_nome))].filter((x) => casa(x, busca)).sort();
+    if (t === 'estabelecimentos') return clis.filter((c) => casa(c.nome, busca) || casa(c.mun_nome, busca) || c.cnes === busca).slice(0, 40).map((c) => ({ cnes: c.cnes, nome: c.nome, municipio: c.mun_nome, regiao_saude: c.rs_nome, natureza: c.nj, gestao: c.gest, habilitacoes: c.hab, maquinas_hd: c.maq, capacidade_hd: c.cap }));
+    throw new Error('tipo aceita: meses, ufs, modalidades, naturezas, indicadores, regioes_saude, municipios_com_estabelecimento, estabelecimentos');
+  }
+
+  const FERRAMENTAS = [
+    { name: 'consultar_indicadores', fn: consultar,
+      description: 'Calcula indicadores de diálise (pacientes, casos novos, óbitos, valor, deslocamento, qualidade, transplante, capacidade) para o Brasil ou uma UF, num período, com até 2 agrupamentos e filtros. Retorna linhas com os indicadores pedidos e observações. Use listar_valores para descobrir nomes de indicadores, regiões ou estabelecimentos.',
+      inputSchema: { type: 'object', properties: {
+        escopo: { type: 'string', description: '"BR" (todas as UFs) ou sigla da UF do estabelecimento, ex. "SP". Agrupar por estabelecimento, regiao_saude ou municipio_estabelecimento exige UF.' },
+        mes_inicio: { type: 'string', description: 'AAAAMM. Omitido: mês padrão (último completo).' }, mes_fim: { type: 'string', description: 'AAAAMM.' },
+        agrupar_por: { type: 'array', items: { type: 'string', enum: AGRUP }, maxItems: 2 },
+        filtros: { type: 'object', properties: { ufs: { type: 'array', items: { type: 'string' } }, modalidade: { type: 'string' }, natureza: { type: 'string' }, gestao: { type: 'string' }, regiao_saude: { type: 'string' }, municipio_estabelecimento: { type: 'string' }, estabelecimento: { type: 'string', description: 'CNES ou parte do nome' } } },
+        indicadores: { type: 'array', items: { type: 'string', enum: Object.keys(INDICADORES) } },
+        ordenar_por: { type: 'string' }, ordem: { type: 'string', enum: ['desc', 'asc'] }, limite: { type: 'integer', maximum: 60 } }, required: ['escopo'] } },
+    { name: 'residencia_pacientes', fn: residencia,
+      description: 'Onde moram os pacientes atendidos pelos estabelecimentos de uma UF num mês: por município, região de saúde ou UF de residência, ou por estabelecimento (com filtro de município de residência). Retorna pacientes, % fora do município/região, distância média e pacientes a mais de 50 km.',
+      inputSchema: { type: 'object', properties: {
+        uf: { type: 'string', description: 'Sigla da UF dos estabelecimentos' }, mes: { type: 'string', description: 'AAAAMM; omitido = mês padrão' },
+        agrupar_por: { type: 'string', enum: ['municipio_residencia', 'regiao_residencia', 'uf_residencia', 'estabelecimento'] },
+        filtros: { type: 'object', properties: { estabelecimento: { type: 'string' }, regiao_saude_estabelecimento: { type: 'string' }, municipio_residencia: { type: 'string' }, regiao_residencia: { type: 'string' } } },
+        ordenar_por: { type: 'string', enum: ['pacientes', 'pct_fora_municipio', 'pct_fora_regiao', 'distancia_media_km', 'pacientes_mais_50km'] }, limite: { type: 'integer', maximum: 60 } }, required: ['uf'] } },
+    { name: 'listar_valores', fn: listar,
+      description: 'Lista valores válidos: meses disponíveis (e mês padrão), UFs, modalidades, naturezas, indicadores (com definição), e — com uf — regiões de saúde, municípios com estabelecimento ou estabelecimentos (busca por nome/município/CNES).',
+      inputSchema: { type: 'object', properties: { tipo: { type: 'string', enum: ['meses', 'ufs', 'modalidades', 'naturezas', 'indicadores', 'regioes_saude', 'municipios_com_estabelecimento', 'estabelecimentos'] }, uf: { type: 'string' }, busca: { type: 'string' } }, required: ['tipo'] } },
+  ];
+
+  function instrucoes() {
+    return `Você é o assistente da página "Pergunte aos dados de diálise". Responda em português do Brasil, só com base nos dados obtidos pelas ferramentas desta página. Nunca invente números nem use conhecimento externo para números.
+
+DADOS DISPONÍVEIS
+- APAC de Tratamento Dialítico (SIA/SUS, DATASUS) das 27 UFs, ${fmtMes(D.meses[0])} a ${fmtMes(D.meses.at(-1))}, por mês de processamento; o estado é o do estabelecimento que atende.
+- CNES jul/2026: máquinas de hemodiálise e capacidade estimada (máquinas ambulatoriais em uso × 6 pacientes). Habilitações em DRC (CNESNet).
+- Mês padrão: ${fmtMes(D.padrao)}${D.incompletos.length ? ` (o último mês, ${fmtMes(D.meses.at(-1))}, está incompleto em ${D.incompletos.join(', ')})` : ''}. Se o usuário não disser o período, use o mês padrão e diga qual mês usou.
+- Pacientes = chave composta (estabelecimento + sexo + município de residência + data da 1ª diálise + início na clínica), não CNS. Não há dados individuais.
+- NÃO há: número de sessões, valor pago, internações/óbitos do SIH/SIM, filas ou recusas para diálise, equipes profissionais, prevalência de doença renal na população, população dos municípios (sem taxas por habitante). Se perguntarem isso, diga claramente que não está nos dados e sugira o que existe de mais próximo.
+
+COMO RESPONDER
+1. Use as ferramentas para cada número. Se precisar, use listar_valores para achar nomes exatos.
+2. Comece com a resposta direta em 1–2 frases, com o período e o recorte usados.
+3. Se houver 3 ou mais itens, mostre uma tabela em Markdown (no máximo 15 linhas), com números no formato brasileiro (1.234; 12,5%; R$ 1,2 mi).
+4. Termine com "Notas:" só quando houver ressalva relevante (mês incompleto, preenchimento baixo de exames, ocupação aproximada, distância em linha reta).
+5. Seja breve. Não cite nomes de ferramentas nem parâmetros técnicos.`;
+  }
+
+  // ------------------------------------------------------------ Markdown seguro (sem innerHTML)
+  function inline(el, txt) {
+    const partes = String(txt).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    for (const p of partes) {
+      if (!p) continue;
+      if (p.startsWith('**') && p.endsWith('**')) { const b = document.createElement('strong'); b.textContent = p.slice(2, -2); el.append(b); }
+      else if (p.startsWith('`') && p.endsWith('`')) { const c = document.createElement('code'); c.textContent = p.slice(1, -1); el.append(c); }
+      else el.append(p);
+    }
+  }
+  function markdown(box, md) {
+    box.replaceChildren();
+    const L = String(md).replace(/\r/g, '').split('\n');
+    let i = 0;
+    const numCel = (s) => /^[−\-+]?(R\$\s*)?[\d.,]+\s*(%|mi|mil|bi|km)?$/.test(s.trim());
+    while (i < L.length) {
+      const l = L[i];
+      if (!l.trim()) { i++; continue; }
+      if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < L.length && /^\s*\|?\s*:?-{2,}/.test(L[i + 1])) {
+        const cel = (s) => s.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+        const cab = cel(l); i += 2;
+        const corpo = []; while (i < L.length && /^\s*\|.*\|\s*$/.test(L[i])) corpo.push(cel(L[i++]));
+        const w = document.createElement('div'); w.className = 'tab';
+        const t = document.createElement('table'), th = document.createElement('thead'), tr = document.createElement('tr');
+        const numCol = cab.map((_, j) => corpo.length && corpo.every((r) => !r[j] || numCel(r[j])));
+        cab.forEach((c, j) => { const e = document.createElement('th'); if (numCol[j]) e.className = 'n'; inline(e, c); tr.append(e); });
+        th.append(tr); t.append(th);
+        const tb = document.createElement('tbody');
+        for (const r of corpo) { const rr = document.createElement('tr'); cab.forEach((_, j) => { const e = document.createElement('td'); if (numCol[j]) e.className = 'n'; inline(e, r[j] ?? ''); rr.append(e); }); tb.append(rr); }
+        t.append(tb); w.append(t); box.append(w); continue;
+      }
+      const h = l.match(/^#{1,6}\s+(.*)$/);
+      if (h) { const e = document.createElement('h3'); inline(e, h[1]); box.append(e); i++; continue; }
+      if (/^\s*([-*•]|\d+[.)])\s+/.test(l)) {
+        const ord = /^\s*\d+[.)]/.test(l); const lista = document.createElement(ord ? 'ol' : 'ul');
+        while (i < L.length && /^\s*([-*•]|\d+[.)])\s+/.test(L[i])) { const li = document.createElement('li'); inline(li, L[i].replace(/^\s*([-*•]|\d+[.)])\s+/, '')); lista.append(li); i++; }
+        box.append(lista); continue;
+      }
+      const par = []; while (i < L.length && L[i].trim() && !/^\s*\|/.test(L[i]) && !/^#{1,6}\s/.test(L[i]) && !/^\s*([-*•]|\d+[.)])\s+/.test(L[i])) par.push(L[i++]);
+      const p = document.createElement('p'); par.forEach((x, k) => { if (k) p.append(document.createElement('br')); inline(p, x); }); box.append(p);
+    }
+  }
+
+  // ------------------------------------------------------------ interface
+  const $ = (id) => document.getElementById(id);
+  const conversa = $('conversa'), form = $('form'), campo = $('pergunta'), bEnviar = $('enviar'), bParar = $('parar');
+  const EXEMPLOS = [
+    'Quais estados têm a maior ocupação estimada da hemodiálise?',
+    'Como evoluíram os casos novos no Brasil mês a mês?',
+    'Em SP, quais regiões de saúde têm mais pacientes viajando mais de 50 km?',
+    'Compare o Kt/V na meta entre os estados do Nordeste, mostrando o preenchimento.',
+    'Quantos pacientes aptos a transplante estão sem encaminhamento na Bahia?',
+    'Qual a participação da diálise peritoneal por estado?',
+  ];
+  let historico = [], ctl = null, pronto = false;
+
+  function bolha(tipo) { const d = document.createElement('div'); d.className = 'msg ' + tipo; conversa.append(d); d.scrollIntoView({ block: 'end', behavior: 'smooth' }); return d; }
+  function ocupado(sim) { bEnviar.disabled = sim || !pronto; bParar.hidden = !sim; campo.disabled = sim; for (const c of document.querySelectorAll('.chip')) c.disabled = sim || !pronto; }
+  const resumoArgs = (a) => Object.entries(a || {}).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join('; ');
+  const NOMES = { consultar_indicadores: 'Indicadores', residencia_pacientes: 'Residência dos pacientes', listar_valores: 'Lista de valores' };
+
+  // ------------------------------------------------------------ API (via servidor do app)
+  let codigo = (() => { try { return sessionStorage.getItem('codigo') || ''; } catch (e) { return ''; } })();
+  $('form-codigo').addEventListener('submit', (e) => {
+    e.preventDefault(); codigo = $('codigo').value.trim();
+    try { sessionStorage.setItem('codigo', codigo); } catch (er) { /* sem armazenamento: vale só nesta aba */ }
+    $('form-codigo').hidden = true; campo.focus();
+  });
+  async function chamar(corpo, signal) {
+    const r = await fetch('api/claude', { method: 'POST', headers: { 'content-type': 'application/json', 'x-codigo-acesso': codigo }, body: JSON.stringify(corpo), signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.erro || 'Falha no servidor (' + r.status + ').'), { status: r.status });
+    return j;
+  }
+  async function rodar(texto, tools, signal) {
+    const msgs = [...historico.slice(-8), { role: 'user', content: texto }];
+    const defs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema }));
+    for (let rodada = 0; rodada < 8; rodada++) {
+      const resp = await chamar({ system: instrucoes(), messages: msgs, tools: defs }, signal);
+      const blocos = resp.content || [];
+      const txt = blocos.filter((x) => x.type === 'text').map((x) => x.text).join('\n\n').trim();
+      if (resp.stop_reason !== 'tool_use') {
+        if (!txt) throw new Error('Não houve resposta. Tente simplificar a pergunta.');
+        return { text: txt, truncated: resp.stop_reason === 'max_tokens' };
+      }
+      msgs.push({ role: 'assistant', content: blocos });
+      const resultados = [];
+      for (const bl of blocos.filter((x) => x.type === 'tool_use')) {
+        const t = tools.find((x) => x.name === bl.name);
+        try {
+          if (!t) throw new Error('Consulta desconhecida.');
+          const out = await t.execute(bl.input || {});
+          resultados.push({ type: 'tool_result', tool_use_id: bl.id, content: JSON.stringify(out).slice(0, 30000) });
+        } catch (e) { resultados.push({ type: 'tool_result', tool_use_id: bl.id, content: 'Erro: ' + e.message, is_error: true }); }
+      }
+      msgs.push({ role: 'user', content: resultados });
+    }
+    throw new Error('A pergunta exigiu consultas demais. Tente ser mais específico.');
+  }
+
+  async function perguntar(texto) {
+    texto = texto.trim();
+    if (!texto || !pronto || ctl) return;
+    $('exemplos').hidden = true;
+    const u = bolha('user'); u.textContent = texto;
+    const b = bolha('bot');
+    const st = document.createElement('div'); st.className = 'status'; st.textContent = 'Pensando…';
+    const resp = document.createElement('div'); resp.className = 'resp';
+    const det = document.createElement('details'); det.className = 'consultas'; det.hidden = true;
+    const sum = document.createElement('summary'); const lista = document.createElement('ol'); det.append(sum, lista);
+    b.append(st, resp, det);
+    const usadas = [];
+    const tools = FERRAMENTAS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, execute: async (input) => {
+      st.hidden = false; st.textContent = `Consultando: ${NOMES[t.name]}…`;
+      const li = document.createElement('li'); const s = document.createElement('span'); s.textContent = NOMES[t.name] + ': '; li.append(s, resumoArgs(input) || '(sem filtros)');
+      lista.append(li); usadas.push(t.name); det.hidden = false; sum.textContent = `Consultas usadas (${usadas.length})`;
+      try { return await t.fn(input || {}); } catch (e) { li.append(' — erro: ' + e.message); throw e; }
+    } }));
+    ctl = new AbortController(); ocupado(true);
+    try {
+      const r = await rodar(texto, tools, ctl.signal);
+      markdown(resp, r.text); st.hidden = true;
+      if (r.truncated) { const n = document.createElement('div'); n.className = 'aviso'; n.textContent = 'A resposta foi cortada. Tente uma pergunta mais específica.'; b.append(n); }
+      historico.push({ role: 'user', content: texto }, { role: 'assistant', content: r.text });
+    } catch (e) {
+      st.hidden = true;
+      resp.replaceChildren();
+      const cancel = e?.name === 'AbortError';
+      const msgs = { 401: 'Código de acesso inválido ou ausente.', 413: 'A conversa ficou longa demais. Clique em "Nova conversa".', 429: 'Muitas perguntas em pouco tempo. Aguarde um pouco e tente de novo.', 503: 'O chat não está configurado neste servidor.' };
+      const n = document.createElement('div'); n.className = cancel ? 'aviso' : 'erro';
+      n.textContent = cancel ? 'Interrompido.' : (msgs[e?.status] || e?.message || 'Algo falhou ao responder. Tente de novo.');
+      b.append(n);
+      if (e?.status === 401) { $('form-codigo').hidden = false; $('codigo').focus(); }
+    } finally { ctl = null; ocupado(false); if (pronto) campo.focus(); b.scrollIntoView({ block: 'end', behavior: 'smooth' }); }
+  }
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); const t = campo.value; campo.value = ''; ajustar(); perguntar(t); });
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+  const ajustar = () => { campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 144) + 'px'; };
+  campo.addEventListener('input', ajustar);
+  bParar.addEventListener('click', () => ctl?.abort());
+  $('limpar').addEventListener('click', () => { ctl?.abort(); historico = []; conversa.replaceChildren(); $('exemplos').hidden = false; });
+  $('chips').append(...EXEMPLOS.map((q) => { const c = document.createElement('button'); c.type = 'button'; c.className = 'chip'; c.textContent = q; c.addEventListener('click', () => perguntar(q)); return c; }));
+  ocupado(false);
+
+  function indisponivel(msg) {
+    pronto = false; ocupado(false);
+    const d = document.createElement('div'); d.className = 'indisp'; d.textContent = msg; conversa.replaceChildren(d);
+  }
+
+  (async () => {
+    try { await carregarBase(); }
+    catch (e) { $('meta-dados').textContent = 'Os dados não carregaram.'; indisponivel('Não foi possível carregar os dados. Recarregue a página.'); return; }
+    $('meta-dados').textContent = `Dados de ${fmtMes(D.meses[0])} a ${fmtMes(D.meses.at(-1))} · mês padrão ${fmtMes(D.padrao)}`;
+    let st = null;
+    try { st = await fetch('api/claude').then((r) => (r.ok ? r.json() : null)); } catch (e) { st = null; }
+    if (!st) { indisponivel('O chat precisa do servidor do app (não funciona abrindo o arquivo direto). Veja o LEIAME.'); return; }
+    if (!st.configurado) { indisponivel('O chat não está configurado neste servidor: falta a chave da API Anthropic.'); return; }
+    if (st.precisa_codigo && !codigo) { $('form-codigo').hidden = false; }
+    pronto = true; ocupado(false);
+  })();
+
+  window.__trs = { consultar, residencia, listar, carregarBase, D, markdown, rodar };
+})();
+</script>
+</body>
+</html>

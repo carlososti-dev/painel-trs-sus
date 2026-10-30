@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diálise no SUS – Painel TRS</title>
+<meta name="description" content="Painel de terapia renal substitutiva (diálise) no SUS, a partir de dados públicos do DATASUS (APAC/SIA e CNES), ago/2024 a jul/2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* Tokens equivalentes aos do painel publicado no Claude, para rodar fora dele */
+:root {
+  --font-anthropic-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-anthropic-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --color-bg: #f6f7f5; --color-panel: #ffffff; --color-fg: #1c2321; --color-fg-muted: #5d6a66; --color-border-line: #dde2df;
+  --color-ok: #1f7a4d; --color-warn: #8a5a00; --color-bad: #b3362d;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 16px; --cds-gap-lg: 24px;
+  --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 18px;
+  --cds-radius: 10px; --cds-font-size-caption: 12.5px; --cds-font-size-body: 14.5px; --cds-font-size-heading: 16px; --cds-font-size-title: 30px; --cds-font-weight-medium: 600;
+  --cds-chart-grid: #e7ebe9; --cds-chart-axis: #b9c2bf; --cds-chart-reference: #7d8a86; --cds-chart-muted: #c3cbc8; --cds-chart-status-critical: #c2412f;
+  --cds-surface-popover: #ffffff; --cds-border: #d3d9d6; --cds-shadow-popover: 0 6px 20px rgba(20, 30, 28, .12); --cds-text-secondary: #5d6a66; --cds-dur-slow: .3s;
+  --c1: #0f6e63; --c2: #c2412f; --c3: #3d6fb6; --c4: #b07d12; --c5: #7a4fa3; --c6: #2f8f5b; --c7: #a34f78; --c8: #5b6770;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --color-bg: #121615; --color-panel: #1a201e; --color-fg: #e6ebe9; --color-fg-muted: #9aa7a3; --color-border-line: #2c3532;
+  --color-ok: #5fd39a; --color-warn: #e0b45c; --color-bad: #ef8a80;
+  --cds-chart-grid: #252d2a; --cds-chart-axis: #4a5551; --cds-chart-reference: #8a9894; --cds-chart-muted: #3e4845; --cds-chart-status-critical: #ef7a6c;
+  --cds-surface-popover: #222927; --cds-border: #36403c; --cds-shadow-popover: 0 6px 20px rgba(0, 0, 0, .5); --cds-text-secondary: #9aa7a3;
+  --c1: #5cc2b2; --c2: #ef7a6c; --c3: #7fa6e0; --c4: #e0b45c; --c5: #b393d6; --c6: #6fcf97; --c7: #e08bb4; --c8: #9aa7b0; color-scheme: dark } }
+html { background: var(--color-bg); }
+body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); line-height: 1.5; }
+#dash-root { --dash-gutter: clamp(16px, 3vw, 32px); max-width: 1280px; margin: 0 auto; padding: 28px max(var(--dash-gutter), env(safe-area-inset-right, 0px)) 40px max(var(--dash-gutter), env(safe-area-inset-left, 0px)); }
+.dash-skeleton { position: relative; min-height: 1.2em; }
+.dash-skeleton::after { content: ""; position: absolute; inset: 8px 0 auto 0; height: 14px; max-width: 60%; border-radius: 7px; background: var(--color-border-line); }
+.rodape-web { max-width: 1280px; margin: 0 auto; padding: 0 max(var(--dash-gutter, 24px), 16px) 32px; color: var(--color-fg-muted); font-size: 12.5px; }
+.rodape-web a { color: inherit; }
+</style>
+<style>
+#dash-root { --dash-gutter: clamp(12px, 3vw, 32px); }
+.trs { font-family: var(--font-anthropic-sans); color: var(--color-fg); display: flex; flex-direction: column; gap: var(--cds-gap-lg); }
+.trs-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.trs-head p { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); max-width: 70ch; }
+.trs-filtros { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: flex-end; }
+.trs-filtros label { display: flex; flex-direction: column; gap: 2px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-width: 0; }
+.trs-filtros select { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 4px 6px; max-width: 15rem; }
+.trs-btn { font: inherit; font-size: var(--cds-font-size-caption); color: var(--color-fg); background: transparent; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 6px 10px; cursor: pointer; }
+.trs-btn:hover { background: var(--color-panel); }
+.trs-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--color-border-line); }
+.trs-tab { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg-muted); background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; }
+.trs-tab[aria-selected="true"] { color: var(--color-fg); border-bottom-color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+.trs-tab:focus-visible, .trs-btn:focus-visible, .trs-filtros select:focus-visible, th button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.trs-pagina { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+.trs-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+.trs-kpi { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.trs-kpi .rot { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.trs-kpi .val { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; }
+.trs-kpi .var { font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; color: var(--color-fg-muted); }
+.trs-kpi .var.bom { color: var(--color-ok); } .trs-kpi .var.ruim { color: var(--color-bad); }
+.trs-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
+.trs-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+.trs-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.trs-card .nota { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; }
+.trs-graf { position: relative; min-height: 220px; }
+.trs-graf.peq { min-height: 150px; }
+.trs-mult { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--cds-gap-md); }
+.trs-mult .trs-card { padding: var(--cds-pad-md); }
+.trs-mult h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0; display: flex; justify-content: space-between; gap: 8px; }
+.trs-mult h3 span { font-family: var(--font-anthropic-serif); font-weight: 400; font-variant-numeric: tabular-nums; }
+.trs-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 5; }
+.trs-tip .t { color: var(--cds-text-secondary); }
+.trs-tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.trs-tabwrap { max-height: 32rem; overflow: auto; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
+.trs-tabela { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.trs-tabela th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); border-bottom: 1px solid var(--color-border-line); padding: 0; white-space: nowrap; z-index: 1; }
+.trs-tabela th button { font: inherit; color: inherit; background: none; border: 0; padding: 6px 8px; cursor: pointer; width: 100%; text-align: inherit; }
+.trs-tabela th.n, .trs-tabela td.n { text-align: right; }
+.trs-tabela td { padding: 5px 8px; border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.trs-tabela td.nome { min-width: 14rem; }
+.trs-tabela tr.alerta td.oc { color: var(--color-bad); font-weight: var(--cds-font-weight-medium); }
+.trs-busca { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 5px 8px; max-width: 20rem; width: 100%; }
+.trs-pill { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--color-border-line); margin: 0 3px 2px 0; white-space: nowrap; }
+.trs-falha { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: inherit; }
+.trs-falha::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+.trs-notas { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; font-size: var(--cds-font-size-body); max-width: 80ch; }
+.trs-legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.trs-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+@media (max-width: 640px) { .trs-tabela .opc { display: none; } }
+.trs-filtros label[hidden] { display: none; }
+.trs-aviso { font-size: var(--cds-font-size-body); color: var(--color-fg-muted); margin: 0; }
+.trs-chat { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--cds-gap-sm); font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); color: var(--color-fg); text-decoration: none; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 999px; padding: 6px 14px; }
+.trs-chat:hover { border-color: var(--color-fg); }
+.trs-chat:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.trs-tabela tbody tr.clic { cursor: pointer; }
+.trs-tabela tbody tr.clic:hover td { background: var(--color-bg); }
+.trs-preench { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+</style><script>
+/* Substitui o runtime do painel do Claude: carrega os arquivos de dados/ e gerencia filtros. */
+(() => {
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const ARQ = { brasil: 'dados/brasil.csv', brasil_ufs: 'dados/brasil_ufs.csv', municipios: 'dados/municipios.csv' };
+  const estado = new Map(); const ouvintes = []; let params = { uf: null, ref: null, rs: null, mun: null, cnes: null, mod: null, nj: null, gest: null };
+  let agendado = false;
+  const avisar = () => { if (agendado) return; agendado = true; requestAnimationFrame(() => { agendado = false; for (const f of ouvintes) { try { f(); } catch (e) { console.error(e); } } }); };
+  function parseCSV(txt) {
+    const linhas = []; let campo = '', linha = [], aspas = false;
+    for (let i = 0; i < txt.length; i++) { const c = txt[i];
+      if (aspas) { if (c === '"') { if (txt[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c; }
+      else if (c === '"') aspas = true; else if (c === ',') { linha.push(campo); campo = ''; }
+      else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; } else if (c !== '\r') campo += c; }
+    if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+    const cab = linhas.shift();
+    return linhas.filter((l) => l.length === cab.length).map((l) => Object.fromEntries(cab.map((k, i) => [k, l[i]])));
+  }
+  function carregar(id) {
+    const url = ARQ[id] || (id.startsWith('uf_') ? `dados/uf/${id.slice(3)}.json` : null);
+    if (!url) { estado.set(id, { status: 'missing', data: [] }); return; }
+    estado.set(id, { status: 'loading', data: [] });
+    fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return url.endsWith('.json') ? r.json() : r.text(); })
+      .then((d) => { estado.set(id, { status: 'ok', data: url.endsWith('.json') ? (d.rows || d) : parseCSV(d) }); avisar(); })
+      .catch((e) => { estado.set(id, { status: 'error', data: [], message: String(e) }); avisar(); });
+  }
+  const lerHash = () => { const h = location.hash.slice(1); return h; };
+  let largura = window.innerWidth;
+  window.addEventListener('resize', () => { if (Math.abs(window.innerWidth - largura) > 20) { largura = window.innerWidth; avisar(); } });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { window.dash.colors = cores(); avisar(); });
+  const cores = () => ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'].map(css);
+  window.dash = {
+    colors: cores(),
+    data(id) { if (!estado.has(id)) carregar(id); const s = estado.get(id); return { status: s.status, data: s.data, message: s.message, refreshing: false, meta: [] }; },
+    onData(fn) { ouvintes.push(fn); fn(); },
+    params: () => ({ ...params }),
+    setParams(o) { params = { ...params, ...o }; avisar(); },
+    resetParams() { params = { uf: null, ref: null, rs: null, mun: null, cnes: null, mod: null, nj: null, gest: null }; avisar(); },
+    setLink(nome) { try { history.replaceState(null, '', '#' + nome); } catch (e) {} },
+  };
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+
+
+<div class="trs" id="topo">
+  <header class="trs-head">
+    <h1 id="titulo">Diálise no SUS – Brasil</h1>
+    <p id="takeaway" class="mk" data-source="brasil">—</p>
+    <p id="aviso" class="trs-aviso mk" data-source="brasil" hidden></p>
+    <a class="trs-chat" id="link-chat" href="chat.html">Pergunte aos dados em linguagem natural →</a>
+  </header>
+
+  <div class="trs-filtros mk" id="filtros" data-source="brasil">
+    <label for="f-uf">Estado<select id="f-uf"></select></label>
+    <label for="f-ref">Mês de referência<select id="f-ref"></select></label>
+    <label for="f-rs" id="l-rs">Região de saúde<select id="f-rs"></select></label>
+    <label for="f-mun" id="l-mun">Município do estabelecimento<select id="f-mun"></select></label>
+    <label for="f-cnes" id="l-cnes">Estabelecimento<select id="f-cnes"></select></label>
+    <label for="f-mod">Modalidade<select id="f-mod"></select></label>
+    <label for="f-nj">Natureza jurídica<select id="f-nj"></select></label>
+    <label for="f-gest">Gestão<select id="f-gest"></select></label>
+    <button class="trs-btn" id="f-limpar" type="button">Limpar filtros</button>
+  </div>
+
+  <nav class="trs-tabs" role="tablist" aria-label="Seções do painel">
+    <button class="trs-tab" role="tab" id="tab-geral" data-pag="geral" aria-selected="true">Visão geral</button>
+    <button class="trs-tab" role="tab" id="tab-estab" data-pag="estab" aria-selected="false">Estabelecimentos</button>
+    <button class="trs-tab" role="tab" id="tab-acesso" data-pag="acesso" aria-selected="false">Acesso</button>
+    <button class="trs-tab" role="tab" id="tab-qualidade" data-pag="qualidade" aria-selected="false">Qualidade</button>
+    <button class="trs-tab" role="tab" id="tab-transplante" data-pag="transplante" aria-selected="false">Transplante</button>
+    <button class="trs-tab" role="tab" id="tab-plan" data-pag="plan" aria-selected="false">Planejamento</button>
+    <button class="trs-tab" role="tab" id="tab-metodo" data-pag="metodo" aria-selected="false">Metodologia</button>
+  </nav>
+
+  <section class="trs-pagina" id="geral" role="tabpanel" aria-labelledby="tab-geral">
+    <div class="trs-kpis mk" id="kpis" data-source="brasil"></div>
+    <div class="trs-card so-br" id="card-ufs">
+      <h2>Comparação entre estados</h2>
+      <p class="nota">Mês de referência, pela UF do estabelecimento. Clique num estado para abrir a visão dele. Ocupação aproximada: pacientes em hemodiálise ÷ capacidade estimada da UF.</p>
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-ufs" data-source="brasil"></table></div>
+    </div>
+    <div class="trs-grade">
+      <div class="trs-card" id="card-pac">
+        <h2>Pacientes em diálise por mês</h2>
+        <p class="nota">Pacientes distintos (chave composta) com APAC no mês, ago/2024 a jul/2026.</p>
+        <div class="trs-graf mk" id="g-pac" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-entradas">
+        <h2>Entradas e saídas por mês</h2>
+        <p class="nota">Casos novos (1ª diálise no mês) e saídas registradas na APAC.</p>
+        <div class="trs-legenda mk" id="leg-entradas" data-source="brasil"></div>
+        <div class="trs-graf mk" id="g-entradas" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-mod">
+        <h2>Pacientes por modalidade</h2>
+        <p class="nota" id="nota-mod">No mês de referência.</p>
+        <div class="trs-graf peq mk" id="g-mod" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-nj">
+        <h2>Pacientes por natureza jurídica e gestão</h2>
+        <p class="nota">No mês de referência, pelo estabelecimento que atende.</p>
+        <div class="trs-graf peq mk" id="g-nj" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-valor">
+        <h2>Valor aprovado por mês</h2>
+        <p class="nota">Soma do valor total aprovado das APACs de diálise (R$).</p>
+        <div class="trs-graf mk" id="g-valor" data-source="brasil"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="estab" role="tabpanel" aria-labelledby="tab-estab" hidden>
+    <div class="trs-card" id="card-tab-estab">
+      <h2 id="tit-estab">Estabelecimentos que realizam diálise</h2>
+      <p class="nota" id="nota-estab">—</p>
+      <input class="trs-busca" id="busca-estab" type="search" placeholder="Buscar estabelecimento, município ou CNES" aria-label="Buscar estabelecimento">
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-estab" data-source="brasil"></table></div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="acesso" role="tabpanel" aria-labelledby="tab-acesso" hidden>
+    <div class="trs-kpis mk" id="kpis-acesso" data-source="brasil"></div>
+    <div class="trs-grade">
+      <div class="trs-card" id="card-fora">
+        <h2>Tratamento fora do domicílio por mês</h2>
+        <p class="nota">Pacientes tratados fora do município e fora da região de saúde de residência.</p>
+        <div class="trs-legenda mk" id="leg-fora" data-source="brasil"></div>
+        <div class="trs-graf mk" id="g-fora" data-source="brasil"></div>
+      </div>
+      <div class="trs-card so-uf" id="card-dist">
+        <h2>Distância até a clínica</h2>
+        <p class="nota">Pacientes por faixa de distância em linha reta (centro do município de residência ao do estabelecimento), no mês de referência.</p>
+        <div class="trs-graf peq mk" id="g-dist" data-source="brasil"></div>
+      </div>
+      <div class="trs-card so-br" id="card-dist-uf">
+        <h2>Distância média por estado</h2>
+        <p class="nota">Linha reta entre municípios, mês de referência.</p>
+        <div class="trs-graf mk" id="g-dist-uf" data-source="brasil"></div>
+      </div>
+    </div>
+    <div class="trs-card so-br" id="card-acesso-uf">
+      <h2>Acesso por estado</h2>
+      <p class="nota">Mês de referência. Escolha um estado para ver municípios e regiões de residência.</p>
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-acesso-uf" data-source="brasil"></table></div>
+    </div>
+    <div class="trs-card so-uf" id="card-rs-res">
+      <h2>Por região de saúde de residência</h2>
+      <p class="nota">Onde moram os pacientes atendidos pelos estabelecimentos filtrados, no mês de referência.</p>
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-rsres" data-source="brasil"></table></div>
+    </div>
+    <div class="trs-card so-uf" id="card-mun-res">
+      <h2>Municípios de residência com mais deslocamento</h2>
+      <p class="nota">Municípios com pacientes em diálise, ordenados pelo número de pacientes que viajam mais de 50 km.</p>
+      <input class="trs-busca" id="busca-mun" type="search" placeholder="Buscar município" aria-label="Buscar município de residência">
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-munres" data-source="brasil"></table></div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="qualidade" role="tabpanel" aria-labelledby="tab-qualidade" hidden>
+    <p class="nota" style="margin:0">Percentuais mensais calculados sobre as APACs com o campo preenchido com valor válido. O número ao lado do título é o do mês de referência. O preenchimento dos exames varia muito entre estados: veja a coluna de preenchimento antes de comparar.</p>
+    <div class="trs-mult mk" id="mult-qual" data-source="brasil"></div>
+    <div class="trs-card" id="card-tab-qual">
+      <h2 id="tit-qual">Indicadores por estado</h2>
+      <p class="nota">Mês de referência. Traço: menos de 10 APACs com o campo válido.</p>
+      <input class="trs-busca" id="busca-qual" type="search" placeholder="Buscar" aria-label="Buscar na tabela de qualidade">
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-qual" data-source="brasil"></table></div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="transplante" role="tabpanel" aria-labelledby="tab-transplante" hidden>
+    <div class="trs-grade">
+      <div class="trs-card" id="card-sittra">
+        <h2>Situação para transplante</h2>
+        <p class="nota">Pacientes no mês de referência.</p>
+        <div class="trs-graf peq mk" id="g-sittra" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-apto">
+        <h2>Pacientes aptos: onde estão no caminho</h2>
+        <p class="nota">Entre os aptos a transplante, no mês de referência.</p>
+        <div class="trs-graf peq mk" id="g-apto" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-cncdo">
+        <h2>Aptos inscritos na lista (CNCDO) por mês</h2>
+        <p class="nota">Percentual dos aptos inscritos e dos aptos sem encaminhamento.</p>
+        <div class="trs-legenda mk" id="leg-cncdo" data-source="brasil"></div>
+        <div class="trs-graf mk" id="g-cncdo" data-source="brasil"></div>
+      </div>
+    </div>
+    <div class="trs-card" id="card-tab-tx">
+      <h2 id="tit-tx">Acesso ao transplante por estado</h2>
+      <p class="nota">Mês de referência.</p>
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-tx" data-source="brasil"></table></div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="plan" role="tabpanel" aria-labelledby="tab-plan" hidden>
+    <div class="trs-card" id="card-plan-rs">
+      <h2 id="tit-plan">Capacidade e demanda por estado</h2>
+      <p class="nota" id="nota-plan">—</p>
+      <div class="trs-tabwrap"><table class="trs-tabela mk" id="t-plan" data-source="brasil"></table></div>
+    </div>
+    <div class="trs-grade">
+      <div class="trs-card" id="card-ocup">
+        <h2 id="tit-ocup">Maior ocupação</h2>
+        <p class="nota">Pacientes em hemodiálise ÷ capacidade estimada, mês de referência.</p>
+        <div class="trs-graf mk" id="g-ocup" data-source="brasil"></div>
+      </div>
+      <div class="trs-card" id="card-cresc">
+        <h2 id="tit-cresc">Crescimento em 12 meses</h2>
+        <p class="nota">Variação de pacientes atendidos entre o mês de referência e 12 meses antes.</p>
+        <div class="trs-graf mk" id="g-cresc" data-source="brasil"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trs-pagina" id="metodo" role="tabpanel" aria-labelledby="tab-metodo" hidden>
+    <div class="trs-card" id="card-metodo">
+      <h2>Como os números foram calculados</h2>
+      <ul class="trs-notas">
+        <li><b>Fonte principal:</b> APAC de Tratamento Dialítico (SIA/SUS, arquivos ATD de cada UF, DATASUS), ago/2024 a jul/2026, pelo mês de processamento. Uma APAC corresponde a um paciente em um estabelecimento no mês. O estado é o do estabelecimento que atende.</li>
+        <li><b>Pacientes:</b> contados pela chave composta estabelecimento + sexo + município de residência + data da 1ª diálise + data de início na clínica, uma vez por estabelecimento e mês. O CNS vem vazio na maioria das APACs recentes e não é usado.</li>
+        <li><b>Casos novos:</b> APACs cuja data da primeira diálise cai no próprio mês. <b>Saídas:</b> motivo de saída da APAC (óbito 41–43, transferência 31, alta 11–18).</li>
+        <li><b>Distância:</b> linha reta entre o centro do município de residência e o do município do estabelecimento; 0 km no mesmo município. Não é a distância de estrada.</li>
+        <li><b>Capacidade estimada de hemodiálise:</b> máquinas de hemodiálise ambulatoriais em uso no CNES de jul/2026 × 3 turnos × 2 pacientes por máquina e turno na semana (6 pacientes por máquina). É uma referência, não o limite legal do serviço. Na visão por estado, só estabelecimentos com máquina registrada entram na ocupação; na comparação entre estados, a ocupação é aproximada (todos os pacientes de hemodiálise da UF ÷ capacidade da UF).</li>
+        <li><b>Qualidade:</b> metas usadas — hemoglobina ≥ 10 g/dL, Kt/V semanal ≥ 1,2, albumina ≥ 3,5 g/dL, fósforo entre 3,5 e 5,5 mg/dL. Valores fora de faixas plausíveis são descartados. Acesso vascular conta só hemodiálise; peritonite só diálise peritoneal. O preenchimento dos exames varia muito entre estados.</li>
+        <li><b>Valor:</b> valor total aprovado da APAC. O valor efetivamente pago e o número de sessões não estão na APAC (exigem a Produção Ambulatorial).</li>
+        <li><b>Habilitações:</b> lista do CNESNet (Relatórios › Habilitações): 1504 hemodiálise, 1505 diálise peritoneal, 1506 pré-dialítico, 1515 incremento TRS.</li>
+        <li><b>O que não está aqui:</b> filas e recusas para diálise (não são públicas), ligação de internações e óbitos do SIH/SIM ao paciente, equipes profissionais.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const nf = new Intl.NumberFormat('pt-BR');
+  const nf1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const pf = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const cf = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+  const rs$ = (v) => 'R$ ' + cf.format(v);
+  const fmtMes = (m) => MESES[+m.slice(4, 6) - 1] + '/' + m.slice(2, 4);
+  const pct = (a, b) => (b > 0 ? a / b : null);
+  const fp = (v) => (v == null || !isFinite(v) ? '—' : pf.format(v));
+  const fn = (v) => (v == null || !isFinite(v) ? '—' : nf.format(v));
+  const MODS = ['Hemodiálise', 'Hemodiálise – sorologia positiva', 'Hemodiálise pediátrica', 'Diálise peritoneal (DPA/DPAC)', 'Diálise peritoneal intermitente', 'Outros'];
+  const NUM = ['apacs', 'pacientes', 'valor', 'novos', 'obitos', 'transferencias', 'altas', 'encerramentos', 'fora_mun', 'fora_rs', 'dist_soma', 'dist_n', 'dist_50', 'interc_s', 'interc_n', 'peri_s', 'peri_n', 'fav', 'cat_curta', 'cat_longa', 'apto', 'inapto', 'recusa', 'na90', 'cncdo', 'avaliacao', 'sem_encam', 'aguard_consulta', 'hb_ok', 'hb_n', 'ktv_ok', 'ktv_n', 'alb_ok', 'alb_n', 'fos_ok', 'fos_n', 'hiv_p', 'hcv_p', 'hbs_p', 'sor_n', 'aut_soma', 'aut_n', 'nefro_s', 'nefro_n'];
+  const UFS = { AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso', PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco', PI: 'Piauí', PR: 'Paraná', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima', RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'São Paulo', TO: 'Tocantins' };
+  const COD_UF = { 11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO', 21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA', 31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP', 41: 'PR', 42: 'SC', 43: 'RS', 50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF' };
+  const isHD = (m) => m.startsWith('Hemodiálise');
+  const sel = (id) => document.getElementById(id);
+  const P = () => dash.params();
+  const ufAtual = () => (P().uf && UFS[P().uf] ? P().uf : null);
+
+  // ---------- preparação dos dados
+  const cacheN = { src: null };
+  function prepNacional(brasil, ufsCap) {
+    if (cacheN.src === brasil && cacheN.srcU === ufsCap) return cacheN;
+    const rows = brasil.map((r) => {
+      const o = { uf: r.uf, mes: String(r.mes), mod: r.modalidade, nj: r.natjur_grupo, gest: r.gestao };
+      for (const k of NUM) o[k] = +r[k] || 0;
+      return o;
+    });
+    const cap = new Map(ufsCap.map((u) => [u.uf, { cap: +u.cap_hd || 0, n: +u.n_clinicas || 0, maq: +u.maq_hd_uso || 0, comMaq: +u.clinicas_com_maquina || 0 }]));
+    Object.assign(cacheN, { src: brasil, srcU: ufsCap, rows, cap, meses: [...new Set(rows.map((r) => r.mes))].sort() });
+    return cacheN;
+  }
+  const cacheU = new Map();
+  let munMap = null, munSrc = null;
+  function prepMun(municipios) {
+    if (munSrc === municipios) return munMap;
+    munMap = new Map(municipios.map((m) => [String(m.cod), { nome: m.nome, rs: m.rs ? String(m.rs) : null, rs_nome: m.rs_nome, lat: m.lat === '' || m.lat == null ? NaN : +m.lat, lon: m.lon === '' || m.lon == null ? NaN : +m.lon, uf: COD_UF[String(m.uf)] || String(m.uf) }]));
+    munSrc = municipios;
+    return munMap;
+  }
+  const arr = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? JSON.parse(v) : []);
+  function prepUF(uf, linhas, mun) {
+    const c0 = cacheU.get(uf);
+    if (c0 && c0.src === linhas && c0.mun === mun) return c0;
+    const cliArr = [];
+    const rows = [], flx = [];
+    let cols = null, mods = MODS;
+    for (const l of linhas) {
+      if (l.t === 'h') { cols = arr(l.mensal_cols); mods = arr(l.modalidades); }
+    }
+    for (const l of linhas) {
+      if (l.t === 'c') {
+        const hab = arr(l.hab);
+        cliArr[+l.i] = { cnes: String(l.cnes).padStart(7, '0'), nome: l.nome, mun: String(l.mun), mun_nome: l.mun_nome, rs: l.rs ? String(l.rs) : null, rs_nome: l.rs_nome || '—',
+          natjur_grupo: l.natjur_grupo, gestao: l.gestao, hab, cap_hd: +l.cap_hd || 0, hd_amb_uso: +l.hd_amb_uso || 0, lat: +l.lat, lon: +l.lon };
+      }
+    }
+    for (const l of linhas) {
+      if (l.t === 'm') {
+        const v = arr(l.v), c = cliArr[v[1]];
+        const o = { mes: String(v[0]), cnes: c.cnes, mod: mods[v[2]], nj: c.natjur_grupo, gest: c.gestao };
+        for (let k = 3; k < cols.length; k++) o[cols[k]] = +v[k] || 0;
+        rows.push(o);
+      } else if (l.t === 'f') {
+        const v = arr(l.v);
+        flx.push({ mes: String(v[0]), res: String(v[1]), cnes: cliArr[v[2]].cnes, pac: +v[3] || 0 });
+      }
+    }
+    const cli = new Map(cliArr.filter(Boolean).map((c) => [c.cnes, c]));
+    const R = 6371, rad = Math.PI / 180, dc = new Map();
+    for (const f of flx) {
+      const k = f.res + '|' + f.cnes;
+      if (!dc.has(k)) {
+        const c = cli.get(f.cnes), m = mun.get(f.res);
+        let d = NaN;
+        if (c && c.mun === f.res) d = 0;
+        else if (c && m && isFinite(m.lat) && isFinite(c.lat)) {
+          const dphi = (c.lat - m.lat) * rad, dl = (c.lon - m.lon) * rad;
+          d = 2 * R * Math.asin(Math.sqrt(Math.sin(dphi / 2) ** 2 + Math.cos(m.lat * rad) * Math.cos(c.lat * rad) * Math.sin(dl / 2) ** 2));
+        }
+        dc.set(k, d);
+      }
+      f.dist = dc.get(k);
+    }
+    const o = { src: linhas, mun, uf, cli, rows, flx, meses: [...new Set(rows.map((r) => r.mes))].sort() };
+    cacheU.set(uf, o);
+    return o;
+  }
+
+  // ---------- marcação das fontes conforme o modo
+  let marcado = undefined;
+  function marcar(uf) {
+    if (marcado === uf) return;
+    marcado = uf;
+    const fonte = uf ? `uf_${uf} municipios` : 'brasil brasil_ufs';
+    for (const el of document.querySelectorAll('.mk')) el.setAttribute('data-source', fonte);
+    for (const el of document.querySelectorAll('.so-br')) el.hidden = !!uf;
+    for (const el of document.querySelectorAll('.so-uf')) el.hidden = !uf;
+    for (const id of ['l-rs', 'l-mun', 'l-cnes']) sel(id).hidden = !uf;
+    sel('titulo').textContent = 'Diálise no SUS – ' + (uf ? UFS[uf] : 'Brasil');
+  }
+
+  // ---------- filtros
+  const FILTROS = { 'f-uf': 'uf', 'f-ref': 'ref', 'f-rs': 'rs', 'f-mun': 'mun', 'f-cnes': 'cnes', 'f-mod': 'mod', 'f-nj': 'nj', 'f-gest': 'gest' };
+  for (const [id, nome] of Object.entries(FILTROS)) {
+    sel(id).addEventListener('change', (e) => {
+      const v = e.target.value || null;
+      const upd = { [nome]: v };
+      if (nome === 'uf') { upd.rs = null; upd.mun = null; upd.cnes = null; }
+      if (nome === 'rs') { upd.mun = null; upd.cnes = null; }
+      if (nome === 'mun') upd.cnes = null;
+      dash.setParams(upd);
+    });
+  }
+  sel('f-limpar').addEventListener('click', () => {
+    dash.resetParams();
+    dash.setParams({ uf: null, ref: null, rs: null, mun: null, cnes: null, mod: null, nj: null, gest: null });
+  });
+  function opcoes(el, lista, rotuloTodos, valor) {
+    const atual = valor ?? '';
+    el.replaceChildren(new Option(rotuloTodos, ''), ...lista.map(([v, t]) => new Option(t, v)));
+    el.value = lista.some(([v]) => v === atual) ? atual : '';
+  }
+  const abrirUF = (uf) => dash.setParams({ uf, rs: null, mun: null, cnes: null });
+
+  // ---------- abas
+  let pagina = 'geral';
+  const abas = [...document.querySelectorAll('.trs-tab')];
+  function mostrar(id, link = true) {
+    if (!abas.some((b) => b.dataset.pag === id)) return;
+    pagina = id;
+    for (const b of abas) b.setAttribute('aria-selected', String(b.dataset.pag === id));
+    for (const b of abas) sel(b.dataset.pag).hidden = b.dataset.pag !== id;
+    if (link) dash.setLink(id);
+    desenhar();
+  }
+  for (const b of abas) b.addEventListener('click', () => mostrar(b.dataset.pag));
+
+  // ---------- ajudantes de desenho
+  function falha(el) { el.replaceChildren(); const d = document.createElement('div'); d.className = 'trs-falha'; d.textContent = 'Falha ao carregar'; el.append(d); }
+  function esqueleto(el) { el.replaceChildren(); el.classList.add('dash-skeleton'); }
+  function tooltip(box) {
+    let t = box.querySelector('.trs-tip');
+    if (!t) { t = document.createElement('div'); t.className = 'trs-tip'; t.hidden = true; box.append(t); }
+    return t;
+  }
+  function posTip(t, box, x, y) {
+    const w = t.offsetWidth, bw = box.clientWidth;
+    t.style.left = Math.max(0, Math.min(bw - w, x + 12)) + 'px';
+    t.style.top = Math.max(0, y - t.offsetHeight - 8) + 'px';
+  }
+  function legenda(el, itens) {
+    el.replaceChildren(...itens.map(([nome, cor]) => { const s = document.createElement('span'); const i = document.createElement('i'); i.style.background = cor; s.append(i, nome); return s; }));
+  }
+
+  // gráfico de linhas: series = [{nome, cor, valores: [{mes, v}]}]
+  function linhas(box, series, fmt, opts = {}) {
+    box.classList.remove('dash-skeleton');
+    box.replaceChildren();
+    const W = Math.max(240, box.clientWidth), H = opts.h || 220;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
+    const todos = series.flatMap((s) => s.valores.filter((p) => p.v != null && isFinite(p.v)));
+    if (!todos.length) { box.replaceChildren(); return; }
+    const meses = series[0].valores.map((p) => p.mes);
+    let ymax = d3.max(todos, (p) => p.v);
+    let ymin = opts.zero === false ? d3.min(todos, (p) => p.v) : 0;
+    if (opts.max != null) ymax = Math.max(ymax, opts.max);
+    if (ymax === ymin) ymax = ymin + 1;
+    const y = d3.scaleLinear([ymin, ymax], [H - 24, 10]).nice(4);
+    const ticks = y.ticks(4);
+    const tmp = svg.append('g').attr('font-size', 11);
+    let ml = 0;
+    for (const t of ticks) { const tx = tmp.append('text').text(fmt(t)); ml = Math.max(ml, tx.node().getComputedTextLength()); }
+    const xw = tmp.append('text').text(fmtMes(meses[meses.length - 1])).node().getComputedTextLength();
+    tmp.remove();
+    const left = Math.max(ml + 10, xw / 2 + 4), right = xw / 2 + 6;
+    const x = d3.scalePoint(meses, [left, W - right]);
+    const g = svg.append('g');
+    g.selectAll('line.gr').data(ticks).join('line').attr('x1', left).attr('x2', W - right).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 1);
+    g.selectAll('text.yt').data(ticks).join('text').attr('x', left - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(fmt);
+    const passo = Math.max(1, Math.ceil(meses.length / Math.max(2, Math.floor((W - left) / 56))));
+    g.selectAll('text.xt').data(meses.filter((_, i) => i % passo === 0 || i === meses.length - 1).filter((m, i, arr) => !(i === arr.length - 2 && meses.indexOf(arr[arr.length - 1]) - meses.indexOf(m) < passo))).join('text')
+      .attr('x', (m) => x(m)).attr('y', H - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text(fmtMes);
+    if (opts.ref) g.append('line').attr('x1', x(opts.ref)).attr('x2', x(opts.ref)).attr('y1', 10).attr('y2', H - 24).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+    const ln = d3.line().defined((p) => p.v != null && isFinite(p.v)).x((p) => x(p.mes)).y((p) => y(p.v));
+    for (const s of series) g.append('path').attr('d', ln(s.valores)).attr('fill', 'none').attr('stroke', s.cor).attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+    const dots = series.map((s) => g.append('circle').attr('r', 3.5).attr('fill', s.cor).attr('visibility', 'hidden'));
+    const tip = tooltip(box);
+    const reg = svg.append('rect').attr('x', left).attr('y', 0).attr('width', W - right - left).attr('height', H).attr('fill', 'transparent');
+    reg.on('mousemove', (ev) => {
+      const [mx] = d3.pointer(ev);
+      const i = Math.max(0, Math.min(meses.length - 1, Math.round((mx - left) / ((W - right - left) / Math.max(1, meses.length - 1)))));
+      const m = meses[i];
+      tip.replaceChildren();
+      const t = document.createElement('div'); t.className = 't'; t.textContent = fmtMes(m); tip.append(t);
+      series.forEach((s, k) => {
+        const p = s.valores[i];
+        dots[k].attr('cx', x(m)).attr('cy', p.v != null && isFinite(p.v) ? y(p.v) : -10).attr('visibility', p.v != null && isFinite(p.v) ? 'visible' : 'hidden');
+        const l = document.createElement('div');
+        if (series.length > 1) { const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = s.cor; l.append(sw); }
+        l.append((series.length > 1 ? s.nome + ': ' : '') + (p.v != null && isFinite(p.v) ? fmt(p.v) : '—'));
+        tip.append(l);
+      });
+      tip.hidden = false;
+      const r = box.getBoundingClientRect(), sr = svg.node().getBoundingClientRect();
+      posTip(tip, box, x(m) * sr.width / W + (sr.left - r.left), d3.min(series, (s) => (isFinite(s.valores[i].v) ? y(s.valores[i].v) : H)) * sr.height / H);
+    }).on('mouseleave', () => { tip.hidden = true; dots.forEach((d) => d.attr('visibility', 'hidden')); });
+  }
+
+  // barras horizontais: itens = [{rotulo, v, cor?, txt?}]
+  function barrasH(box, itens, fmt, opts = {}) {
+    box.classList.remove('dash-skeleton');
+    box.replaceChildren();
+    if (!itens.length) return;
+    const W = Math.max(240, box.clientWidth), bh = opts.bh || 22, gap = 8;
+    const H = itens.length * (bh + gap) + 4;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
+    const tmp = svg.append('g').attr('font-size', 12);
+    let lw = 0, vw = 0;
+    for (const it of itens) {
+      lw = Math.max(lw, tmp.append('text').text(it.rotulo).node().getComputedTextLength());
+      vw = Math.max(vw, tmp.append('text').text(it.txt ?? fmt(it.v)).node().getComputedTextLength());
+    }
+    tmp.remove();
+    const lmax = Math.min(lw, W * 0.45);
+    const left = lmax + 10, right = vw + 16;
+    const x = d3.scaleLinear([0, opts.max ?? (d3.max(itens, (i) => i.v) || 1)], [left, Math.max(left + 20, W - right)]);
+    const g = svg.selectAll('g.b').data(itens).join('g').attr('transform', (_, i) => `translate(0,${i * (bh + gap) + 2})`);
+    g.append('text').attr('x', left - 8).attr('y', bh / 2).attr('dy', '0.32em').attr('text-anchor', 'end').attr('font-size', 12).attr('fill', 'var(--color-fg)')
+      .text((d) => d.rotulo).each(function (d) {
+        const el = this; let t = d.rotulo;
+        while (el.getComputedTextLength() > lmax && t.length > 4) { t = t.slice(0, -2); el.textContent = t + '…'; }
+      });
+    g.append('rect').attr('x', left).attr('y', 2).attr('height', bh - 4).attr('rx', 4).attr('width', (d) => Math.max(0, x(Math.max(0, d.v)) - left)).attr('fill', (d) => d.cor || dash.colors[0]);
+    g.append('text').attr('x', (d) => x(Math.max(0, d.v)) + 6).attr('y', bh / 2).attr('dy', '0.32em').attr('font-size', 12).attr('fill', 'var(--color-fg-muted)').style('font-variant-numeric', 'tabular-nums').text((d) => d.txt ?? fmt(d.v));
+    if (opts.ref != null) svg.append('line').attr('x1', x(opts.ref)).attr('x2', x(opts.ref)).attr('y1', 0).attr('y2', H).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+  }
+
+  // tabela ordenável: cols = [{chave, rotulo, n?, fmt?, cls?}]
+  const ordem = {};
+  function tabela(el, cols, linhasT, id, opts = {}) {
+    const st = ordem[id] || (ordem[id] = { chave: opts.ordem || cols[0].chave, desc: opts.desc !== false });
+    const busca = opts.busca ? (document.getElementById(opts.busca).value || '').toLowerCase() : '';
+    let L = busca ? linhasT.filter((r) => cols.some((c) => String(r[c.chave] ?? '').toLowerCase().includes(busca))) : linhasT.slice();
+    L.sort((a, b) => {
+      const va = a[st.chave], vb = b[st.chave];
+      const na = va == null || (typeof va === 'number' && !isFinite(va)), nb = vb == null || (typeof vb === 'number' && !isFinite(vb));
+      if (na !== nb) return na ? 1 : -1;
+      const r = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR');
+      return st.desc ? -r : r;
+    });
+    const thead = document.createElement('thead'), tr = document.createElement('tr');
+    for (const c of cols) {
+      const th = document.createElement('th');
+      if (c.n) th.classList.add('n'); if (c.opc) th.classList.add('opc');
+      th.setAttribute('aria-sort', st.chave === c.chave ? (st.desc ? 'descending' : 'ascending') : 'none');
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = c.rotulo + (st.chave === c.chave ? (st.desc ? ' ↓' : ' ↑') : '');
+      b.addEventListener('click', () => { if (st.chave === c.chave) st.desc = !st.desc; else { st.chave = c.chave; st.desc = !!c.n; } tabela(el, cols, linhasT, id, opts); });
+      th.append(b); tr.append(th);
+    }
+    thead.append(tr);
+    const tb = document.createElement('tbody');
+    for (const r of L) {
+      const t = document.createElement('tr');
+      if (opts.alerta && opts.alerta(r)) t.classList.add('alerta');
+      if (opts.clique) { t.classList.add('clic'); t.tabIndex = 0; t.addEventListener('click', () => opts.clique(r)); t.addEventListener('keydown', (e) => { if (e.key === 'Enter') opts.clique(r); }); }
+      for (const c of cols) {
+        const td = document.createElement('td');
+        if (c.n) td.classList.add('n'); if (c.cls) td.classList.add(c.cls); if (c.opc) td.classList.add('opc');
+        if (c.pills) { for (const p of r[c.chave] || []) { const s = document.createElement('span'); s.className = 'trs-pill'; s.textContent = p; td.append(s); } }
+        else td.textContent = c.fmt ? c.fmt(r[c.chave], r) : (r[c.chave] ?? '—');
+        t.append(td);
+      }
+      tb.append(t);
+    }
+    el.replaceChildren(thead, tb);
+  }
+  for (const [b, t] of [['busca-estab', 'estab'], ['busca-mun', 'acesso'], ['busca-qual', 'qualidade']]) sel(b).addEventListener('input', () => { if (pagina === t) desenhar(); });
+
+  const soma = (rows, k) => { let s = 0; for (const r of rows) s += r[k]; return s; };
+  function agrega(rows) { const o = {}; for (const k of NUM) o[k] = 0; for (const r of rows || []) for (const k of NUM) o[k] += r[k]; return o; }
+  function porMes(rows, meses) { const m = new Map(meses.map((x) => [x, []])); for (const r of rows) m.get(r.mes)?.push(r); return m; }
+  const ufNome = (u) => `${UFS[u] || u} (${u})`;
+
+  // ---------- desenho principal
+  function desenhar() {
+    const uf = ufAtual();
+    marcar(uf);
+    const ids = uf ? [`uf_${uf}`, 'municipios'] : ['brasil', 'brasil_ufs'];
+    const D = ids.map((i) => dash.data(i));
+    const caixas = [...document.querySelectorAll('.trs-graf, .trs-kpis, .trs-mult, .trs-tabela')];
+    opcoes(sel('f-uf'), Object.keys(UFS).map((u) => [u, UFS[u]]), 'Brasil (todos)', P().uf);
+    if (D.some((d) => ['error', 'connect', 'declined', 'missing'].includes(d.status))) {
+      caixas.forEach(falha); sel('takeaway').textContent = '—'; return;
+    }
+    if (D.some((d) => d.status !== 'ok')) { caixas.forEach(esqueleto); return; }
+    caixas.forEach((c) => c.classList.remove('dash-skeleton'));
+    const p = P();
+    let X;
+    if (uf) {
+      const mun = prepMun(D[1].data);
+      const C = prepUF(uf, D[0].data, mun);
+      const clis = [...C.cli.values()];
+      const rsl = [...new Map(clis.filter((c) => c.rs).map((c) => [c.rs, c.rs_nome])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+      opcoes(sel('f-rs'), rsl, 'Todas', p.rs);
+      const munl = [...new Map(clis.filter((c) => !p.rs || c.rs === p.rs).map((c) => [c.mun, c.mun_nome])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+      opcoes(sel('f-mun'), munl, 'Todos', p.mun);
+      opcoes(sel('f-cnes'), clis.filter((c) => (!p.rs || c.rs === p.rs) && (!p.mun || c.mun === p.mun)).map((c) => [c.cnes, c.nome]).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')), 'Todos', p.cnes);
+      const cliOk = new Set(clis.filter((c) => (!p.rs || c.rs === p.rs) && (!p.mun || c.mun === p.mun) && (!p.cnes || c.cnes === p.cnes) && (!p.nj || c.natjur_grupo === p.nj) && (!p.gest || c.gestao === p.gest)).map((c) => c.cnes));
+      const F = C.rows.filter((r) => cliOk.has(r.cnes) && (!p.mod || r.mod === p.mod));
+      X = { modo: 'uf', uf, C, meses: C.meses, F, cliOk, mun };
+    } else {
+      const N = prepNacional(D[0].data, D[1].data);
+      const F = N.rows.filter((r) => (!p.mod || r.mod === p.mod) && (!p.nj || r.nj === p.nj) && (!p.gest || r.gest === p.gest));
+      X = { modo: 'br', N, meses: N.meses, F };
+    }
+    // o último mês costuma chegar incompleto em alguns estados: o padrão é o penúltimo
+    const ult = X.meses[X.meses.length - 1], pen = X.meses[X.meses.length - 2];
+    X.padrao = pen || ult;
+    X.ref = p.ref && X.meses.includes(p.ref) ? p.ref : X.padrao;
+    if (pen) {
+      const base = X.modo === 'uf' ? d3.rollup(X.C.rows, (v) => d3.sum(v, (r) => r.pacientes), () => X.uf, (r) => r.mes) : d3.rollup(X.N.rows, (v) => d3.sum(v, (r) => r.pacientes), (r) => r.uf, (r) => r.mes);
+      const inc = [...base].filter(([, m]) => (m.get(pen) || 0) > 0 && (m.get(ult) || 0) / m.get(pen) < 0.85).map(([u]) => u).sort();
+      const av = sel('aviso');
+      av.hidden = !inc.length;
+      av.textContent = inc.length ? `Atenção: ${fmtMes(ult)} parece incompleto em ${inc.join(', ')} (queda de mais de 15% em relação a ${fmtMes(pen)}), por isso o mês de referência padrão é ${fmtMes(pen)}.` : '';
+      if (!inc.length) X.padrao = ult;
+      X.ref = p.ref && X.meses.includes(p.ref) ? p.ref : X.padrao;
+    }
+    const iref = X.meses.indexOf(X.ref);
+    X.ant = iref > 0 ? X.meses[iref - 1] : null;
+    X.m12 = iref >= 12 ? X.meses[iref - 12] : null;
+    X.pm = porMes(X.F, X.meses);
+    X.a = agrega(X.pm.get(X.ref));
+    X.b = X.ant ? agrega(X.pm.get(X.ant)) : null;
+    opcoes(sel('f-ref'), X.meses.slice().reverse().map((m) => [m, fmtMes(m)]), `Padrão (${fmtMes(X.padrao)})`, p.ref);
+    opcoes(sel('f-mod'), MODS.slice(0, 5).map((m) => [m, m]), 'Todas', p.mod);
+    opcoes(sel('f-nj'), ['Público', 'Privado (empresarial)', 'Sem fins lucrativos'].map((v) => [v, v]), 'Todas', p.nj);
+    opcoes(sel('f-gest'), [['Estadual', 'Estadual'], ['Municipal', 'Municipal']], 'Todas', p.gest);
+
+    const nEst = X.modo === 'uf' ? new Set(X.pm.get(X.ref).map((r) => r.cnes)).size : null;
+    const onde = X.modo === 'uf' ? `em ${nf.format(nEst)} ${nEst === 1 ? 'estabelecimento' : 'estabelecimentos'} do recorte` : 'no Brasil';
+    sel('takeaway').textContent = X.F.length
+      ? `Em ${fmtMes(X.ref)}, ${nf.format(X.a.pacientes)} pacientes fizeram diálise pelo SUS ${onde}; ${nf.format(X.a.novos)} começaram a dialisar no mês e ${fp(pct(X.a.fora_mun, X.a.apacs))} se tratavam fora do município onde moram.`
+      : 'Nenhum dado para os filtros escolhidos.';
+
+    ({ geral, estab, acesso, qualidade, transplante, plan })[pagina]?.(X);
+  }
+
+  function kpi(el, itens) {
+    el.replaceChildren(...itens.map((k) => {
+      const d = document.createElement('div'); d.className = 'trs-kpi';
+      const r = document.createElement('div'); r.className = 'rot'; r.textContent = k.rot;
+      const v = document.createElement('div'); v.className = 'val'; v.textContent = k.val;
+      d.append(r, v);
+      if (k.var != null) { const x = document.createElement('div'); x.className = 'var ' + (k.cls || ''); x.textContent = k.var; d.append(x); }
+      return d;
+    }));
+  }
+  function variacao(a, b, bomSeSobe, fmtv = (x) => nf.format(Math.abs(x))) {
+    if (b == null || a == null || !isFinite(a) || !isFinite(b)) return { v: null };
+    const d = a - b;
+    const s = d > 0 ? '+' : d < 0 ? '−' : '±';
+    const cls = d === 0 || bomSeSobe == null ? '' : (d > 0) === bomSeSobe ? 'bom' : 'ruim';
+    return { v: `${s}${fmtv(d)} vs mês anterior`, cls };
+  }
+  const hdDe = (rows) => soma(rows.filter((r) => isHD(r.mod)), 'pacientes');
+
+  // ocupação: na UF, só estabelecimentos com máquina; no Brasil, aproximada por UF
+  function ocupacao(X, rows) {
+    if (X.modo === 'uf') {
+      const ativos = new Set(rows.map((r) => r.cnes));
+      const cap = d3.sum([...ativos], (c) => X.C.cli.get(c).cap_hd);
+      return pct(soma(rows.filter((r) => isHD(r.mod) && X.C.cli.get(r.cnes).cap_hd > 0), 'pacientes'), cap);
+    }
+    const ufs = new Set(rows.map((r) => r.uf));
+    return pct(hdDe(rows), d3.sum([...ufs], (u) => X.N.cap.get(u)?.cap || 0));
+  }
+
+  function geral(X) {
+    const { a, b, ref, pm, meses } = X;
+    const v1 = variacao(a.pacientes, b?.pacientes, null);
+    const v2 = variacao(a.novos, b?.novos, null);
+    const v3 = variacao(a.obitos, b?.obitos, false);
+    const fr = pct(a.fora_mun, a.apacs), frb = b ? pct(b.fora_mun, b.apacs) : null;
+    const v4 = variacao(fr, frb, false, (x) => nf1.format(Math.abs(x) * 100) + ' p.p.');
+    const v5 = variacao(a.valor, b?.valor, null, (x) => rs$(Math.abs(x)));
+    kpi(sel('kpis'), [
+      { rot: `Pacientes em diálise · ${fmtMes(ref)}`, val: nf.format(a.pacientes), var: v1.v, cls: v1.cls },
+      { rot: 'Casos novos no mês', val: nf.format(a.novos), var: v2.v, cls: v2.cls },
+      { rot: 'Óbitos registrados na APAC', val: nf.format(a.obitos), var: v3.v, cls: v3.cls },
+      { rot: 'Tratados fora do município', val: fp(fr), var: v4.v, cls: v4.cls },
+      { rot: 'Valor aprovado no mês', val: rs$(a.valor), var: v5.v, cls: v5.cls },
+      { rot: 'Ocupação estimada da hemodiálise', val: fp(ocupacao(X, pm.get(ref))), var: X.modo === 'uf' ? 'pacientes ÷ capacidade estimada' : 'aproximada, pacientes ÷ capacidade' },
+    ]);
+    if (X.modo === 'br') {
+      const porUf = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => {
+        const g = agrega(rr), cap = X.N.cap.get(u);
+        return { uf: ufNome(u), sigla: u, est: cap?.n ?? null, pac: g.pacientes, novos: g.novos, obitos: g.obitos, fora: pct(g.fora_mun, g.apacs), valor: g.valor,
+          ocup: cap && cap.cap ? hdDe(rr) / cap.cap : null, ktv: pct(g.ktv_n, g.apacs) };
+      });
+      tabela(sel('t-ufs'), [
+        { chave: 'uf', rotulo: 'Estado', cls: 'nome' }, { chave: 'est', rotulo: 'Estabelecimentos', n: true, fmt: fn, opc: true },
+        { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn }, { chave: 'novos', rotulo: 'Novos', n: true, fmt: fn }, { chave: 'obitos', rotulo: 'Óbitos', n: true, fmt: fn, opc: true },
+        { chave: 'fora', rotulo: 'Fora do município', n: true, fmt: fp }, { chave: 'valor', rotulo: 'Valor aprovado', n: true, fmt: rs$, opc: true },
+        { chave: 'ocup', rotulo: 'Ocupação HD', n: true, fmt: fp, cls: 'oc' }, { chave: 'ktv', rotulo: 'Kt/V informado', n: true, fmt: fp, opc: true },
+      ], porUf, 'ufs', { ordem: 'pac', alerta: (r) => r.ocup != null && r.ocup > 0.9, clique: (r) => abrirUF(r.sigla) });
+    }
+    linhas(sel('g-pac'), [{ nome: 'Pacientes', cor: dash.colors[0], valores: meses.map((m) => ({ mes: m, v: soma(pm.get(m), 'pacientes') })) }], (v) => nf.format(v), { ref, zero: false });
+    const ent = [['Casos novos', dash.colors[0], 'novos'], ['Óbitos', dash.colors[1], 'obitos'], ['Transferências', dash.colors[2], 'transferencias'], ['Altas', dash.colors[3], 'altas']];
+    legenda(sel('leg-entradas'), ent.map(([n, c]) => [n, c]));
+    linhas(sel('g-entradas'), ent.map(([n, c, k]) => ({ nome: n, cor: c, valores: meses.map((m) => ({ mes: m, v: soma(pm.get(m), k) })) })), (v) => nf.format(v), { ref });
+    const porMod = d3.rollups(pm.get(ref), (v) => d3.sum(v, (r) => r.pacientes), (r) => r.mod).sort((x, y) => MODS.indexOf(x[0]) - MODS.indexOf(y[0]));
+    const tot = d3.sum(porMod, (d) => d[1]);
+    sel('nota-mod').textContent = `${fmtMes(ref)}. Diálise peritoneal = ${fp(pct(d3.sum(porMod.filter((d) => d[0].startsWith('Diálise')), (d) => d[1]), tot))} dos pacientes.`;
+    barrasH(sel('g-mod'), porMod.map(([m, v], i) => ({ rotulo: m, v, txt: `${nf.format(v)} (${fp(pct(v, tot))})`, cor: dash.colors[i % 8] })), nf.format);
+    const nj = d3.rollups(pm.get(ref), (v) => d3.sum(v, (r) => r.pacientes), (r) => r.nj + ' · ' + r.gest).sort((x, y) => y[1] - x[1]);
+    barrasH(sel('g-nj'), nj.map(([k, v]) => ({ rotulo: k, v, txt: `${nf.format(v)} (${fp(pct(v, tot))})` })), nf.format);
+    linhas(sel('g-valor'), [{ nome: 'Valor aprovado', cor: dash.colors[0], valores: meses.map((m) => ({ mes: m, v: soma(pm.get(m), 'valor') })) }], rs$, { ref, zero: false });
+  }
+
+  function estab(X) {
+    const { ref, pm } = X;
+    if (X.modo === 'br') {
+      sel('tit-estab').textContent = 'Estabelecimentos e capacidade por estado';
+      sel('busca-estab').hidden = true;
+      const L = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => {
+        const c = X.N.cap.get(u) || {}; const hd = hdDe(rr);
+        return { uf: ufNome(u), sigla: u, est: c.n, comMaq: c.comMaq, maq: c.maq, cap: c.cap, pac: soma(rr, 'pacientes'), hd, ocup: c.cap ? hd / c.cap : null, vagas: c.cap ? c.cap - hd : null };
+      });
+      tabela(sel('t-estab'), [
+        { chave: 'uf', rotulo: 'Estado', cls: 'nome' }, { chave: 'est', rotulo: 'Estabelecimentos', n: true, fmt: fn }, { chave: 'comMaq', rotulo: 'Com máquina registrada', n: true, fmt: fn, opc: true },
+        { chave: 'maq', rotulo: 'Máquinas HD em uso', n: true, fmt: fn }, { chave: 'cap', rotulo: 'Capacidade estimada', n: true, fmt: fn },
+        { chave: 'hd', rotulo: 'Pacientes HD', n: true, fmt: fn }, { chave: 'ocup', rotulo: 'Ocupação aproximada', n: true, fmt: fp, cls: 'oc' }, { chave: 'vagas', rotulo: 'Vagas estimadas', n: true, fmt: fn, opc: true },
+      ], L, 'estab-br', { ordem: 'pac', alerta: (r) => r.ocup != null && r.ocup > 0.9, clique: (r) => abrirUF(r.sigla) });
+      sel('nota-estab').textContent = `${fmtMes(ref)}. Máquinas e capacidade do CNES jul/2026. Clique num estado para ver a lista de estabelecimentos.`;
+      return;
+    }
+    sel('tit-estab').textContent = 'Estabelecimentos que realizam diálise';
+    sel('busca-estab').hidden = false;
+    const byCli = d3.group(pm.get(ref), (r) => r.cnes);
+    const L = [...X.cliOk].filter((c) => byCli.has(c)).map((c) => {
+      const rows = byCli.get(c), cc = X.C.cli.get(c), g = agrega(rows), hd = hdDe(rows);
+      return { cnes: cc.cnes, nome: cc.nome, mun: cc.mun_nome, rs: cc.rs_nome, nj: cc.natjur_grupo, gest: cc.gestao,
+        hab: cc.hab.map((h) => ({ 1504: 'HD', 1505: 'DP', 1506: 'Pré', 1515: 'TRS+' })[h] || h), maq: cc.hd_amb_uso, cap: cc.cap_hd, pac: g.pacientes,
+        ocup: cc.cap_hd > 0 ? hd / cc.cap_hd : null, novos: g.novos, valor: g.valor, fora: pct(g.fora_mun, g.apacs) };
+    });
+    tabela(sel('t-estab'), [
+      { chave: 'cnes', rotulo: 'CNES' }, { chave: 'nome', rotulo: 'Estabelecimento', cls: 'nome' }, { chave: 'mun', rotulo: 'Município' },
+      { chave: 'rs', rotulo: 'Região de saúde', opc: true }, { chave: 'nj', rotulo: 'Natureza', opc: true }, { chave: 'gest', rotulo: 'Gestão', opc: true },
+      { chave: 'hab', rotulo: 'Habilitações', pills: true, opc: true },
+      { chave: 'maq', rotulo: 'Máquinas HD em uso', n: true, fmt: fn }, { chave: 'cap', rotulo: 'Capacidade', n: true, fmt: fn, opc: true },
+      { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn }, { chave: 'ocup', rotulo: 'Ocupação HD', n: true, fmt: fp, cls: 'oc' },
+      { chave: 'novos', rotulo: 'Novos', n: true, fmt: fn, opc: true }, { chave: 'valor', rotulo: 'Valor aprovado', n: true, fmt: rs$ },
+      { chave: 'fora', rotulo: 'Fora do município', n: true, fmt: fp, opc: true },
+    ], L, 'estab-uf', { ordem: 'pac', busca: 'busca-estab', alerta: (r) => r.ocup != null && r.ocup > 0.9 });
+    sel('nota-estab').textContent = `${fmtMes(ref)} · ${nf.format(L.length)} estabelecimentos. Capacidade estimada = máquinas de hemodiálise ambulatoriais em uso (CNES jul/2026) × 6 pacientes. Ocupação acima de 90% em destaque.`;
+  }
+
+  function serieFora(X) {
+    return [
+      { nome: 'Fora do município', cor: dash.colors[0], valores: X.meses.map((m) => { const a = agrega(X.pm.get(m)); return { mes: m, v: pct(a.fora_mun, a.apacs) }; }) },
+      { nome: 'Fora da região de saúde', cor: dash.colors[1], valores: X.meses.map((m) => { const a = agrega(X.pm.get(m)); return { mes: m, v: pct(a.fora_rs, a.apacs) }; }) },
+    ];
+  }
+
+  function acesso(X) {
+    const { ref, pm, a } = X;
+    legenda(sel('leg-fora'), [['Fora do município', dash.colors[0]], ['Fora da região de saúde', dash.colors[1]]]);
+    linhas(sel('g-fora'), serieFora(X), (v) => pf.format(v), { ref });
+    if (X.modo === 'br') {
+      kpi(sel('kpis-acesso'), [
+        { rot: `Distância média · ${fmtMes(ref)}`, val: a.dist_n ? nf1.format(a.dist_soma / a.dist_n) + ' km' : '—', var: 'linha reta, entre municípios' },
+        { rot: 'Viajam mais de 50 km', val: fp(pct(a.dist_50, a.dist_n)), var: nf.format(a.dist_50) + ' APACs' },
+        { rot: 'Tratados fora da região de saúde', val: fp(pct(a.fora_rs, a.apacs)), var: nf.format(a.fora_rs) + ' APACs' },
+        { rot: 'Tratados fora do município', val: fp(pct(a.fora_mun, a.apacs)), var: nf.format(a.fora_mun) + ' APACs' },
+      ]);
+      const L = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => { const g = agrega(rr); return { uf: ufNome(u), sigla: u, pac: g.pacientes, fora: pct(g.fora_mun, g.apacs), foraRs: pct(g.fora_rs, g.apacs), dist: g.dist_n ? g.dist_soma / g.dist_n : null, m50: pct(g.dist_50, g.dist_n) }; });
+      barrasH(sel('g-dist-uf'), L.filter((r) => r.dist != null).sort((x, y) => y.dist - x.dist).map((r) => ({ rotulo: r.uf, v: r.dist, txt: nf1.format(r.dist) + ' km', cor: r.m50 > 0.15 ? 'var(--cds-chart-status-critical)' : dash.colors[0] })), (v) => nf1.format(v), { bh: 16 });
+      tabela(sel('t-acesso-uf'), [
+        { chave: 'uf', rotulo: 'Estado', cls: 'nome' }, { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn },
+        { chave: 'fora', rotulo: 'Fora do município', n: true, fmt: fp }, { chave: 'foraRs', rotulo: 'Fora da região de saúde', n: true, fmt: fp },
+        { chave: 'dist', rotulo: 'Distância média (km)', n: true, fmt: (v) => (v == null ? '—' : nf1.format(v)) }, { chave: 'm50', rotulo: 'Mais de 50 km', n: true, fmt: fp },
+      ], L, 'acesso-uf', { ordem: 'm50', clique: (r) => abrirUF(r.sigla) });
+      return;
+    }
+    const C = X.C, fl = C.flx.filter((f) => f.mes === ref && X.cliOk.has(f.cnes));
+    const tot = d3.sum(fl, (f) => f.pac);
+    const comD = fl.filter((f) => isFinite(f.dist)), totD = d3.sum(comD, (f) => f.pac);
+    const media = totD ? d3.sum(comD, (f) => f.dist * f.pac) / totD : null;
+    const mais50 = d3.sum(comD.filter((f) => f.dist > 50), (f) => f.pac);
+    const foraRs = d3.sum(fl, (f) => { const m = X.mun.get(f.res), c = C.cli.get(f.cnes); return m && c && m.rs && c.rs && m.rs !== c.rs ? f.pac : 0; });
+    const outraUf = d3.sum(fl, (f) => { const m = X.mun.get(f.res); return m && m.uf !== X.uf ? f.pac : 0; });
+    kpi(sel('kpis-acesso'), [
+      { rot: `Distância média · ${fmtMes(ref)}`, val: media == null ? '—' : nf1.format(media) + ' km', var: 'linha reta, entre municípios' },
+      { rot: 'Viajam mais de 50 km', val: fp(pct(mais50, totD)), var: nf.format(mais50) + ' pacientes' },
+      { rot: 'Tratados fora da região de saúde', val: fp(pct(foraRs, tot)), var: nf.format(foraRs) + ' pacientes' },
+      { rot: 'Residentes em outros estados', val: nf.format(outraUf), var: fp(pct(outraUf, tot)) + ' dos pacientes' },
+    ]);
+    const faixas = [['Mesmo município', (d) => d === 0], ['Até 25 km', (d) => d > 0 && d <= 25], ['25 a 50 km', (d) => d > 25 && d <= 50], ['50 a 100 km', (d) => d > 50 && d <= 100], ['Mais de 100 km', (d) => d > 100]];
+    barrasH(sel('g-dist'), faixas.map(([n, f], i) => { const v = d3.sum(comD.filter((x) => f(x.dist)), (x) => x.pac); return { rotulo: n, v, txt: `${nf.format(v)} (${fp(pct(v, totD))})`, cor: i >= 3 ? 'var(--cds-chart-status-critical)' : dash.colors[0] }; }), nf.format);
+    const porRs = d3.rollups(fl, (v) => {
+      const pac = d3.sum(v, (f) => f.pac);
+      const dentro = d3.sum(v, (f) => (C.cli.get(f.cnes)?.rs === X.mun.get(f.res)?.rs ? f.pac : 0));
+      const vd = v.filter((f) => isFinite(f.dist)), pd = d3.sum(vd, (f) => f.pac);
+      return { pac, dentro: pct(dentro, pac), dist: pd ? d3.sum(vd, (f) => f.dist * f.pac) / pd : null, m50: pct(d3.sum(vd.filter((f) => f.dist > 50), (f) => f.pac), pd) };
+    }, (f) => X.mun.get(f.res)?.rs_nome || 'Ignorada');
+    tabela(sel('t-rsres'), [
+      { chave: 'rs', rotulo: 'Região de saúde de residência', cls: 'nome' }, { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn },
+      { chave: 'dentro', rotulo: 'Tratados na própria região', n: true, fmt: fp }, { chave: 'dist', rotulo: 'Distância média (km)', n: true, fmt: (v) => (v == null ? '—' : nf1.format(v)) },
+      { chave: 'm50', rotulo: 'Mais de 50 km', n: true, fmt: fp },
+    ], porRs.map(([rs, o]) => ({ rs, ...o })), 'rsres', { ordem: 'pac' });
+    const porMun = d3.rollups(fl, (v) => {
+      const pac = d3.sum(v, (f) => f.pac);
+      const vd = v.filter((f) => isFinite(f.dist)), pd = d3.sum(vd, (f) => f.pac);
+      const principal = d3.greatest(d3.rollups(v, (x) => d3.sum(x, (f) => f.pac), (f) => f.cnes), (x) => x[1]);
+      const pc = principal ? C.cli.get(principal[0]) : null;
+      return { pac, fora: pct(d3.sum(v, (f) => (C.cli.get(f.cnes)?.mun !== f.res ? f.pac : 0)), pac), dist: pd ? d3.sum(vd, (f) => f.dist * f.pac) / pd : null,
+        n50: d3.sum(vd.filter((f) => f.dist > 50), (f) => f.pac), principal: pc ? `${pc.nome} (${pc.mun_nome})` : '—' };
+    }, (f) => f.res);
+    tabela(sel('t-munres'), [
+      { chave: 'mun', rotulo: 'Município de residência', cls: 'nome' }, { chave: 'rs', rotulo: 'Região de saúde', opc: true },
+      { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn }, { chave: 'fora', rotulo: 'Fora do município', n: true, fmt: fp },
+      { chave: 'dist', rotulo: 'Distância média (km)', n: true, fmt: (v) => (v == null ? '—' : nf1.format(v)) }, { chave: 'n50', rotulo: 'Mais de 50 km', n: true, fmt: fn },
+      { chave: 'principal', rotulo: 'Estabelecimento mais usado', opc: true },
+    ], porMun.map(([cod, o]) => { const m = X.mun.get(cod); return { mun: (m?.nome || cod) + (m && m.uf !== X.uf ? ` (${m.uf})` : ''), rs: m?.rs_nome || '—', ...o }; }), 'munres', { ordem: 'n50', busca: 'busca-mun' });
+  }
+
+  const IND = [
+    { id: 'fav', nome: 'Fístula arteriovenosa (HD)', f: (a) => pct(a.fav, a.fav + a.cat_curta + a.cat_longa) },
+    { id: 'curta', nome: 'Cateter de curta permanência (HD)', f: (a) => pct(a.cat_curta, a.fav + a.cat_curta + a.cat_longa) },
+    { id: 'hb', nome: 'Hemoglobina ≥ 10 g/dL', f: (a) => pct(a.hb_ok, a.hb_n) },
+    { id: 'ktv', nome: 'Kt/V semanal ≥ 1,2', f: (a) => pct(a.ktv_ok, a.ktv_n) },
+    { id: 'alb', nome: 'Albumina ≥ 3,5 g/dL', f: (a) => pct(a.alb_ok, a.alb_n) },
+    { id: 'fos', nome: 'Fósforo 3,5–5,5 mg/dL', f: (a) => pct(a.fos_ok, a.fos_n) },
+    { id: 'interc', nome: 'Internação por intercorrência', f: (a) => pct(a.interc_s, a.interc_n) },
+    { id: 'peri', nome: 'Peritonite no mês (DP)', f: (a) => pct(a.peri_s, a.peri_n) },
+    { id: 'hcv', nome: 'Anti-HCV positivo', f: (a) => pct(a.hcv_p, a.sor_n) },
+    { id: 'nefro', nome: 'Casos novos com nefrologista há > 1 ano', f: (a) => pct(a.nefro_s, a.nefro_n) },
+  ];
+
+  function qualidade(X) {
+    const { ref, pm, meses } = X;
+    const box = sel('mult-qual');
+    box.replaceChildren();
+    const ags = new Map(meses.map((m) => [m, agrega(pm.get(m))]));
+    for (const ind of IND) {
+      const card = document.createElement('div'); card.className = 'trs-card'; card.id = 'q-' + ind.id;
+      const h = document.createElement('h3'); const t = document.createElement('div'); t.textContent = ind.nome; const v = document.createElement('span'); v.textContent = fp(ind.f(ags.get(ref)));
+      h.append(t, v);
+      const g = document.createElement('div'); g.className = 'trs-graf peq';
+      card.append(h, g); box.append(card);
+      linhas(g, [{ nome: ind.nome, cor: dash.colors[0], valores: meses.map((m) => ({ mes: m, v: ind.f(ags.get(m)) })) }], (x) => pf.format(x), { ref, h: 150, zero: false });
+    }
+    const val = (ok, n) => (n >= 10 ? ok / n : null);
+    const linha = (g) => { const acc = g.fav + g.cat_curta + g.cat_longa; return { pac: g.pacientes, fav: val(g.fav, acc), curta: val(g.cat_curta, acc), hb: val(g.hb_ok, g.hb_n), ktv: val(g.ktv_ok, g.ktv_n), alb: val(g.alb_ok, g.alb_n), interc: val(g.interc_s, g.interc_n), lab: pct(g.ktv_n, g.apacs), labHb: pct(g.hb_n, g.apacs) }; };
+    const cols = [
+      { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn },
+      { chave: 'fav', rotulo: 'FAV', n: true, fmt: fp }, { chave: 'curta', rotulo: 'Cateter curta', n: true, fmt: fp }, { chave: 'hb', rotulo: 'Hb ≥ 10', n: true, fmt: fp },
+      { chave: 'ktv', rotulo: 'Kt/V ≥ 1,2', n: true, fmt: fp }, { chave: 'alb', rotulo: 'Albumina ≥ 3,5', n: true, fmt: fp, opc: true },
+      { chave: 'interc', rotulo: 'Internação', n: true, fmt: fp }, { chave: 'lab', rotulo: 'Kt/V informado', n: true, fmt: fp, opc: true }, { chave: 'labHb', rotulo: 'Hb informada', n: true, fmt: fp, opc: true },
+    ];
+    if (X.modo === 'br') {
+      sel('tit-qual').textContent = 'Indicadores por estado';
+      const L = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => ({ nome: ufNome(u), sigla: u, ...linha(agrega(rr)) }));
+      tabela(sel('t-qual'), [{ chave: 'nome', rotulo: 'Estado', cls: 'nome' }, ...cols], L, 'qual-br', { ordem: 'pac', busca: 'busca-qual', clique: (r) => abrirUF(r.sigla) });
+      return;
+    }
+    sel('tit-qual').textContent = 'Indicadores por estabelecimento';
+    const byCli = d3.group(pm.get(ref), (r) => r.cnes);
+    const L = [...X.cliOk].filter((c) => byCli.has(c)).map((c) => { const cc = X.C.cli.get(c); return { nome: cc.nome, mun: cc.mun_nome, ...linha(agrega(byCli.get(c))) }; });
+    tabela(sel('t-qual'), [{ chave: 'nome', rotulo: 'Estabelecimento', cls: 'nome' }, { chave: 'mun', rotulo: 'Município', opc: true }, ...cols], L, 'qual-uf', { ordem: 'pac', busca: 'busca-qual' });
+  }
+
+  function transplante(X) {
+    const { ref, pm, meses, a } = X;
+    const tot = a.apto + a.inapto + a.recusa + a.na90;
+    barrasH(sel('g-sittra'), [['Apto', a.apto], ['Inapto', a.inapto], ['Recusa', a.recusa], ['Menos de 90 dias de tratamento', a.na90]].map(([n, v], i) => ({ rotulo: n, v, txt: `${nf.format(v)} (${fp(pct(v, tot))})`, cor: dash.colors[i] })), nf.format);
+    barrasH(sel('g-apto'), [['Inscrito na CNCDO', a.cncdo], ['Em avaliação no centro transplantador', a.avaliacao], ['Aguardando consulta no centro', a.aguard_consulta], ['Sem encaminhamento', a.sem_encam]].map(([n, v], i) => ({ rotulo: n, v, txt: `${nf.format(v)} (${fp(pct(v, a.apto))})`, cor: i === 3 ? 'var(--cds-chart-status-critical)' : dash.colors[0] })), nf.format);
+    legenda(sel('leg-cncdo'), [['Inscritos na CNCDO', dash.colors[0]], ['Sem encaminhamento', dash.colors[1]]]);
+    const ags = meses.map((m) => [m, agrega(pm.get(m))]);
+    linhas(sel('g-cncdo'), [
+      { nome: 'Inscritos na CNCDO', cor: dash.colors[0], valores: ags.map(([m, x]) => ({ mes: m, v: pct(x.cncdo, x.apto) })) },
+      { nome: 'Sem encaminhamento', cor: dash.colors[1], valores: ags.map(([m, x]) => ({ mes: m, v: pct(x.sem_encam, x.apto) })) },
+    ], (v) => pf.format(v), { ref });
+    const linha = (x) => ({ pac: x.pacientes, aptos: x.apto, apto: pct(x.apto, x.apto + x.inapto + x.recusa + x.na90), cncdo: x.apto >= 5 ? x.cncdo / x.apto : null, sem: x.apto >= 5 ? x.sem_encam / x.apto : null, recusa: pct(x.recusa, x.apto + x.inapto + x.recusa + x.na90) });
+    const cols = [
+      { chave: 'pac', rotulo: 'Pacientes', n: true, fmt: fn }, { chave: 'aptos', rotulo: 'Aptos', n: true, fmt: fn }, { chave: 'apto', rotulo: '% aptos', n: true, fmt: fp },
+      { chave: 'cncdo', rotulo: 'Aptos inscritos', n: true, fmt: fp }, { chave: 'sem', rotulo: 'Aptos sem encaminhamento', n: true, fmt: fp }, { chave: 'recusa', rotulo: 'Recusa', n: true, fmt: fp, opc: true },
+    ];
+    if (X.modo === 'br') {
+      sel('tit-tx').textContent = 'Acesso ao transplante por estado';
+      const L = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => ({ nome: ufNome(u), sigla: u, ...linha(agrega(rr)) }));
+      tabela(sel('t-tx'), [{ chave: 'nome', rotulo: 'Estado', cls: 'nome' }, ...cols], L, 'tx-br', { ordem: 'sem', alerta: (r) => r.sem != null && r.sem > 0.3, clique: (r) => abrirUF(r.sigla) });
+      return;
+    }
+    sel('tit-tx').textContent = 'Acesso ao transplante por estabelecimento';
+    const byCli = d3.group(pm.get(ref), (r) => r.cnes);
+    const L = [...X.cliOk].filter((c) => byCli.has(c)).map((c) => { const cc = X.C.cli.get(c); return { nome: cc.nome, mun: cc.mun_nome, ...linha(agrega(byCli.get(c))) }; });
+    tabela(sel('t-tx'), [{ chave: 'nome', rotulo: 'Estabelecimento', cls: 'nome' }, { chave: 'mun', rotulo: 'Município', opc: true }, ...cols], L, 'tx-uf', { ordem: 'sem', alerta: (r) => r.sem != null && r.sem > 0.3 });
+  }
+
+  function plan(X) {
+    const { ref, pm, m12 } = X;
+    if (X.modo === 'br') {
+      sel('tit-plan').textContent = 'Capacidade e demanda por estado';
+      sel('nota-plan').textContent = `${fmtMes(ref)}. Pacientes em hemodiálise atendidos na UF contra a capacidade estimada (CNES jul/2026). Ocupação aproximada; acima de 90% em destaque. Clique num estado para ver as regiões de saúde.`;
+      sel('tit-ocup').textContent = 'Ocupação aproximada por estado';
+      sel('tit-cresc').textContent = 'Crescimento em 12 meses por estado';
+      const old = m12 ? d3.rollup(pm.get(m12), (v) => d3.sum(v, (r) => r.pacientes), (r) => r.uf) : new Map();
+      const L = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => {
+        const c = X.N.cap.get(u) || {}, hd = hdDe(rr), pac = soma(rr, 'pacientes'), o = old.get(u);
+        return { rs: ufNome(u), sigla: u, nCli: c.n, cap: c.cap, hd, ocup: c.cap ? hd / c.cap : null, folga: c.cap ? c.cap - hd : null, pac, fora: pct(soma(rr, 'fora_rs'), soma(rr, 'apacs')), cresc: o ? pac / o - 1 : null };
+      });
+      tabela(sel('t-plan'), [
+        { chave: 'rs', rotulo: 'Estado', cls: 'nome' }, { chave: 'nCli', rotulo: 'Estabelecimentos', n: true, fmt: fn, opc: true },
+        { chave: 'cap', rotulo: 'Capacidade HD estimada', n: true, fmt: fn }, { chave: 'hd', rotulo: 'Pacientes HD', n: true, fmt: fn },
+        { chave: 'ocup', rotulo: 'Ocupação', n: true, fmt: fp, cls: 'oc' }, { chave: 'folga', rotulo: 'Vagas estimadas', n: true, fmt: fn, opc: true },
+        { chave: 'fora', rotulo: 'Fora da região de saúde', n: true, fmt: fp }, { chave: 'cresc', rotulo: 'Crescimento 12 meses', n: true, fmt: fp },
+      ], L, 'plan-br', { ordem: 'ocup', alerta: (r) => r.ocup != null && r.ocup > 0.9, clique: (r) => abrirUF(r.sigla) });
+      barrasH(sel('g-ocup'), L.filter((r) => r.ocup != null).sort((x, y) => y.ocup - x.ocup).map((r) => ({ rotulo: r.rs, v: r.ocup, txt: pf.format(r.ocup), cor: r.ocup > 0.9 ? 'var(--cds-chart-status-critical)' : dash.colors[0] })), (v) => pf.format(v), { ref: 0.9, bh: 16 });
+      if (!m12) sel('g-cresc').replaceChildren();
+      else barrasH(sel('g-cresc'), L.filter((r) => r.cresc != null).sort((x, y) => y.cresc - x.cresc).map((r) => ({ rotulo: r.rs, v: Math.max(0, r.cresc), txt: (r.cresc >= 0 ? '+' : '−') + pf.format(Math.abs(r.cresc)), cor: r.cresc < 0 ? 'var(--cds-chart-muted)' : dash.colors[0] })), (v) => pf.format(v), { bh: 16 });
+      return;
+    }
+    const C = X.C;
+    sel('tit-plan').textContent = 'Capacidade e demanda por região de saúde';
+    sel('nota-plan').textContent = `${fmtMes(ref)}. Pacientes em hemodiálise atendidos na região contra a capacidade estimada instalada nela; residentes em diálise e quantos são tratados em outra região. Ocupação acima de 90% ou mais de um terço dos residentes tratados fora em destaque.`;
+    sel('tit-ocup').textContent = 'Estabelecimentos com maior ocupação';
+    sel('tit-cresc').textContent = 'Crescimento em 12 meses por região';
+    const linhasRef = pm.get(ref);
+    const regs = new Map();
+    const R = (rs, nome) => { if (!regs.has(rs)) regs.set(rs, { rs: nome, cap: 0, hd: 0, hdCap: 0, pac: 0, res: 0, resFora: 0, distS: 0, distN: 0, pac12: 0, nCli: 0 }); return regs.get(rs); };
+    const ativos = new Set(linhasRef.map((r) => r.cnes));
+    for (const c of X.cliOk) { const cc = C.cli.get(c); if (!cc.rs) continue; const g = R(cc.rs, cc.rs_nome); g.cap += ativos.has(c) ? cc.cap_hd : 0; g.nCli += ativos.has(c) ? 1 : 0; }
+    for (const r of linhasRef) { const cc = C.cli.get(r.cnes); if (!cc.rs) continue; const g = R(cc.rs, cc.rs_nome); g.pac += r.pacientes; if (isHD(r.mod)) { g.hd += r.pacientes; if (cc.cap_hd > 0) g.hdCap += r.pacientes; } }
+    if (m12) for (const r of pm.get(m12)) { const cc = C.cli.get(r.cnes); if (cc.rs) R(cc.rs, cc.rs_nome).pac12 += r.pacientes; }
+    for (const f of C.flx) {
+      if (f.mes !== ref) continue;
+      const m = X.mun.get(f.res); if (!m || !m.rs || !regs.has(m.rs)) continue;
+      const g = regs.get(m.rs); g.res += f.pac; if (C.cli.get(f.cnes)?.rs !== m.rs) g.resFora += f.pac;
+      if (isFinite(f.dist)) { g.distS += f.dist * f.pac; g.distN += f.pac; }
+    }
+    const L = [...regs.values()].map((g) => ({ ...g, ocup: g.cap > 0 ? g.hdCap / g.cap : null, fora: pct(g.resFora, g.res), dist: g.distN ? g.distS / g.distN : null, cresc: g.pac12 ? g.pac / g.pac12 - 1 : null, folga: g.cap - g.hdCap }));
+    tabela(sel('t-plan'), [
+      { chave: 'rs', rotulo: 'Região de saúde', cls: 'nome' }, { chave: 'nCli', rotulo: 'Estabelecimentos', n: true, fmt: fn, opc: true },
+      { chave: 'cap', rotulo: 'Capacidade HD estimada', n: true, fmt: fn }, { chave: 'hd', rotulo: 'Pacientes HD atendidos', n: true, fmt: fn },
+      { chave: 'ocup', rotulo: 'Ocupação', n: true, fmt: fp, cls: 'oc' }, { chave: 'folga', rotulo: 'Vagas estimadas', n: true, fmt: fn, opc: true },
+      { chave: 'res', rotulo: 'Residentes em diálise', n: true, fmt: fn }, { chave: 'fora', rotulo: 'Residentes tratados fora', n: true, fmt: fp },
+      { chave: 'dist', rotulo: 'Distância média (km)', n: true, fmt: (v) => (v == null ? '—' : nf1.format(v)), opc: true }, { chave: 'cresc', rotulo: 'Crescimento 12 meses', n: true, fmt: fp, opc: true },
+    ], L, 'plan-uf', { ordem: 'ocup', alerta: (r) => (r.ocup != null && r.ocup > 0.9) || (r.fora != null && r.fora > 1 / 3) });
+    const byCli = d3.rollups(linhasRef.filter((r) => isHD(r.mod)), (v) => d3.sum(v, (r) => r.pacientes), (r) => r.cnes)
+      .map(([c, hd]) => ({ c: C.cli.get(c), hd })).filter((x) => x.c.cap_hd > 0)
+      .map((x) => ({ rotulo: x.c.nome + ' · ' + x.c.mun_nome, v: x.hd / x.c.cap_hd, txt: `${pf.format(x.hd / x.c.cap_hd)} (${nf.format(x.hd)}/${nf.format(x.c.cap_hd)})` }))
+      .sort((a, b) => b.v - a.v).slice(0, 12);
+    barrasH(sel('g-ocup'), byCli.map((d) => ({ ...d, cor: d.v > 0.9 ? 'var(--cds-chart-status-critical)' : dash.colors[0] })), (v) => pf.format(v), { ref: 0.9 });
+    const cr = L.filter((g) => g.cresc != null && g.pac12 >= 30).sort((a, b) => b.cresc - a.cresc).slice(0, 12);
+    if (!m12) sel('g-cresc').replaceChildren();
+    else barrasH(sel('g-cresc'), cr.map((g) => ({ rotulo: g.rs, v: Math.max(0, g.cresc), txt: (g.cresc >= 0 ? '+' : '−') + pf.format(Math.abs(g.cresc)), cor: g.cresc < 0 ? 'var(--cds-chart-muted)' : dash.colors[0] })), (v) => pf.format(v));
+  }
+
+  dash.onData(desenhar);
+  const alvo = location.hash.slice(1);
+  if (alvo && abas.some((b) => b.dataset.pag === alvo)) mostrar(alvo, false);
+})();
+</script>
+
+</div>
+<footer class="rodape-web">
+  Fontes: DATASUS – SIA/SUS (APAC de Tratamento Dialítico), CNES (equipamentos, jul/2026), CNESNet (habilitações em DRC), Base territorial DATASUS 2026, IBGE. Dados públicos e agregados; sem informação individual de pacientes. Detalhes na aba Metodologia.
+</footer>
+</body>
+</html>

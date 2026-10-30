@@ -1,0 +1,6 @@
+{
+  "name": "painel-trs-sus",
+  "private": true,
+  "type": "module",
+  "description": "Painel e chat sobre diálise no SUS (dados públicos DATASUS)"
+}
