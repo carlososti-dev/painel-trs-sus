@@ -92,17 +92,25 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
 @media (max-width: 640px) { .trs-tabela .opc { display: none; } }
 .trs-filtros label[hidden] { display: none; }
 .trs-aviso { font-size: var(--cds-font-size-body); color: var(--color-fg-muted); margin: 0; }
-.trs-chat { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--cds-gap-sm); font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); color: var(--color-fg); text-decoration: none; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 999px; padding: 6px 14px; }
-.trs-chat:hover { border-color: var(--color-fg); }
-.trs-chat:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 .trs-tabela tbody tr.clic { cursor: pointer; }
 .trs-tabela tbody tr.clic:hover td { background: var(--color-bg); }
 .trs-preench { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-</style><script>
+.trs-mapa-cab { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--cds-gap-sm); }
+.trs-mapa-sel { display: flex; flex-direction: column; gap: 2px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-width: 0; max-width: 100%; }
+.trs-mapa-sel select { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 4px 6px; max-width: 100%; }
+.trs-mapa { position: relative; min-height: 360px; }
+.trs-mapa path.uf { cursor: pointer; stroke: var(--color-panel); stroke-width: 1; }
+.trs-mapa path.uf:hover, .trs-mapa path.uf:focus-visible { stroke: var(--color-fg); stroke-width: 1.5; outline: none; }
+.trs-legenda .faixa { display: inline-flex; align-items: center; gap: 5px; }
+.trs-chat { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--cds-gap-sm); font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); color: var(--color-fg); text-decoration: none; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 999px; padding: 6px 14px; }
+.trs-chat:hover { border-color: var(--color-fg); }
+.trs-chat:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+</style>
+<script>
 /* Substitui o runtime do painel do Claude: carrega os arquivos de dados/ e gerencia filtros. */
 (() => {
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const ARQ = { brasil: 'dados/brasil.csv', brasil_ufs: 'dados/brasil_ufs.csv', municipios: 'dados/municipios.csv' };
+  const ARQ = { brasil: 'dados/brasil.csv', brasil_ufs: 'dados/brasil_ufs.csv', municipios: 'dados/municipios.csv', geo_ufs: 'dados/ufs_geo.json' };
   const estado = new Map(); const ouvintes = []; let params = { uf: null, ref: null, rs: null, mun: null, cnes: null, mod: null, nj: null, gest: null };
   let agendado = false;
   const avisar = () => { if (agendado) return; agendado = true; requestAnimationFrame(() => { agendado = false; for (const f of ouvintes) { try { f(); } catch (e) { console.error(e); } } }); };
@@ -177,6 +185,17 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
 
   <section class="trs-pagina" id="geral" role="tabpanel" aria-labelledby="tab-geral">
     <div class="trs-kpis mk" id="kpis" data-source="brasil"></div>
+    <div class="trs-card so-br" id="card-mapa">
+      <div class="trs-mapa-cab">
+        <div>
+          <h2>Mapa dos estados</h2>
+          <p class="nota" id="nota-mapa">Mês de referência. Clique num estado para abrir a visão dele.</p>
+        </div>
+        <label for="f-mapa" class="trs-mapa-sel">Indicador<select id="f-mapa"></select></label>
+      </div>
+      <div class="trs-mapa mk" id="g-mapa" data-source="brasil"></div>
+      <div class="trs-legenda" id="leg-mapa"></div>
+    </div>
     <div class="trs-card so-br" id="card-ufs">
       <h2>Comparação entre estados</h2>
       <p class="nota">Mês de referência, pela UF do estabelecimento. Clique num estado para abrir a visão dele. Ocupação aproximada: pacientes em hemodiálise ÷ capacidade estimada da UF.</p>
@@ -364,7 +383,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
       for (const k of NUM) o[k] = +r[k] || 0;
       return o;
     });
-    const cap = new Map(ufsCap.map((u) => [u.uf, { cap: +u.cap_hd || 0, n: +u.n_clinicas || 0, maq: +u.maq_hd_uso || 0, comMaq: +u.clinicas_com_maquina || 0 }]));
+    const cap = new Map(ufsCap.map((u) => [u.uf, { cap: +u.cap_hd || 0, n: +u.n_clinicas || 0, maq: +u.maq_hd_uso || 0, comMaq: +u.clinicas_com_maquina || 0, pop: +u.populacao || 0 }]));
     Object.assign(cacheN, { src: brasil, srcU: ufsCap, rows, cap, meses: [...new Set(rows.map((r) => r.mes))].sort() });
     return cacheN;
   }
@@ -624,7 +643,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
   function desenhar() {
     const uf = ufAtual();
     marcar(uf);
-    const ids = uf ? [`uf_${uf}`, 'municipios'] : ['brasil', 'brasil_ufs'];
+    const ids = uf ? [`uf_${uf}`, 'municipios'] : ['brasil', 'brasil_ufs', 'geo_ufs'];
     const D = ids.map((i) => dash.data(i));
     const caixas = [...document.querySelectorAll('.trs-graf, .trs-kpis, .trs-mult, .trs-tabela')];
     opcoes(sel('f-uf'), Object.keys(UFS).map((u) => [u, UFS[u]]), 'Brasil (todos)', P().uf);
@@ -650,7 +669,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
     } else {
       const N = prepNacional(D[0].data, D[1].data);
       const F = N.rows.filter((r) => (!p.mod || r.mod === p.mod) && (!p.nj || r.nj === p.nj) && (!p.gest || r.gest === p.gest));
-      X = { modo: 'br', N, meses: N.meses, F };
+      X = { modo: 'br', N, meses: N.meses, F, geo: D[2].data };
     }
     // o último mês costuma chegar incompleto em alguns estados: o padrão é o penúltimo
     const ult = X.meses[X.meses.length - 1], pen = X.meses[X.meses.length - 2];
@@ -732,6 +751,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
       { rot: 'Ocupação estimada da hemodiálise', val: fp(ocupacao(X, pm.get(ref))), var: X.modo === 'uf' ? 'pacientes ÷ capacidade estimada' : 'aproximada, pacientes ÷ capacidade' },
     ]);
     if (X.modo === 'br') {
+      mapa(X);
       const porUf = d3.groups(pm.get(ref), (r) => r.uf).map(([u, rr]) => {
         const g = agrega(rr), cap = X.N.cap.get(u);
         return { uf: ufNome(u), sigla: u, est: cap?.n ?? null, pac: g.pacientes, novos: g.novos, obitos: g.obitos, fora: pct(g.fora_mun, g.apacs), valor: g.valor,
@@ -755,6 +775,85 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-fami
     const nj = d3.rollups(pm.get(ref), (v) => d3.sum(v, (r) => r.pacientes), (r) => r.nj + ' · ' + r.gest).sort((x, y) => y[1] - x[1]);
     barrasH(sel('g-nj'), nj.map(([k, v]) => ({ rotulo: k, v, txt: `${nf.format(v)} (${fp(pct(v, tot))})` })), nf.format);
     linhas(sel('g-valor'), [{ nome: 'Valor aprovado', cor: dash.colors[0], valores: meses.map((m) => ({ mes: m, v: soma(pm.get(m), 'valor') })) }], rs$, { ref, zero: false });
+  }
+
+
+  // ---------- mapa dos estados (visão Brasil)
+  const IND_MAPA = [
+    { id: 'pmp', nome: 'Pacientes por milhão de habitantes', fmt: (v) => nf.format(Math.round(v)), f: (g, c) => (c?.pop ? (g.pacientes / c.pop) * 1e6 : null) },
+    { id: 'novos', nome: 'Casos novos por milhão de habitantes (no mês)', fmt: (v) => nf1.format(v), f: (g, c) => (c?.pop ? (g.novos / c.pop) * 1e6 : null) },
+    { id: 'fora', nome: '% tratados fora do município', fmt: fp, f: (g) => pct(g.fora_mun, g.apacs) },
+    { id: 'dist', nome: 'Distância média até a clínica (km)', fmt: (v) => nf1.format(v) + ' km', f: (g) => (g.dist_n ? g.dist_soma / g.dist_n : null) },
+    { id: 'm50', nome: '% a mais de 50 km', fmt: fp, f: (g) => pct(g.dist_50, g.dist_n) },
+    { id: 'dp', nome: '% em diálise peritoneal', fmt: fp, f: (g, c, rr) => pct(d3.sum(rr.filter((r) => r.mod.startsWith('Diálise')), (r) => r.pacientes), g.pacientes) },
+    { id: 'sem', nome: '% dos aptos a transplante sem encaminhamento', fmt: fp, f: (g) => pct(g.sem_encam, g.apto) },
+    { id: 'ktvp', nome: '% das APACs com Kt/V informado', fmt: fp, f: (g) => pct(g.ktv_n, g.apacs) },
+  ];
+  let indMapa = 'pmp';
+  sel('f-mapa').addEventListener('change', (e) => { indMapa = e.target.value; desenhar(); });
+  // anéis no sentido que o d3 espera (horário); arquivos GeoJSON costumam vir ao contrário
+  const geoCache = new WeakMap();
+  function geoUFs(rows) {
+    if (geoCache.has(rows)) return geoCache.get(rows);
+    const feats = rows.map((f) => ({ type: 'Feature', properties: typeof f.properties === 'string' ? JSON.parse(f.properties) : f.properties, geometry: typeof f.geometry === 'string' ? JSON.parse(f.geometry) : f.geometry }));
+    for (const f of feats) if (d3.geoArea(f) > 2 * Math.PI) {
+      const g = f.geometry;
+      if (g.type === 'Polygon') g.coordinates = g.coordinates.map((r) => r.slice().reverse());
+      else if (g.type === 'MultiPolygon') g.coordinates = g.coordinates.map((p) => p.map((r) => r.slice().reverse()));
+    }
+    const fc = { type: 'FeatureCollection', features: feats };
+    geoCache.set(rows, fc);
+    return fc;
+  }
+  function mapa(X) {
+    const box = sel('g-mapa'), selI = sel('f-mapa');
+    if (!selI.options.length) selI.replaceChildren(...IND_MAPA.map((i) => new Option(i.nome, i.id)));
+    selI.value = indMapa;
+    const ind = IND_MAPA.find((i) => i.id === indMapa);
+    box.classList.remove('dash-skeleton'); box.replaceChildren();
+    if (!X.geo || !X.geo.length || !d3.geoPath) { box.textContent = 'Mapa indisponível.'; return; }
+    const fc = geoUFs(X.geo);
+    const porUf = new Map(d3.groups(X.pm.get(X.ref), (r) => r.uf).map(([u, rr]) => { const g = agrega(rr); return [u, { v: ind.f(g, X.N.cap.get(u), rr), g }]; }));
+    const vals = [...porUf.values()].map((o) => o.v).filter((v) => v != null && isFinite(v));
+    const W = Math.max(280, box.clientWidth), H = Math.min(560, Math.max(320, W * 0.85));
+    const proj = d3.geoMercator().fitExtent([[8, 8], [W - 8, H - 8]], fc);
+    const path = d3.geoPath(proj);
+    const cs = getComputedStyle(document.documentElement);
+    const claro = cs.getPropertyValue('--color-border-line').trim() || '#dde2df';
+    const ramp = d3.interpolateRgb(claro, dash.colors[0]);
+    const q = vals.length ? d3.scaleQuantile(vals, [0.12, 0.32, 0.52, 0.74, 1].map(ramp)) : null;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Mapa dos estados: ' + ind.nome);
+    const tip = tooltip(box);
+    svg.selectAll('path.uf').data(fc.features).join('path').attr('class', 'uf').attr('d', path).attr('tabindex', 0)
+      .attr('fill', (f) => { const o = porUf.get(f.properties.uf); return o && o.v != null && isFinite(o.v) && q ? q(o.v) : 'var(--color-bg)'; })
+      .on('mousemove', (ev, f) => {
+        const u = f.properties.uf, o = porUf.get(u);
+        tip.replaceChildren();
+        const t = document.createElement('div'); t.className = 't'; t.textContent = `${UFS[u] || u} · ${fmtMes(X.ref)}`; tip.append(t);
+        const l1 = document.createElement('div'); l1.textContent = `${ind.nome}: ${o && o.v != null && isFinite(o.v) ? ind.fmt(o.v) : '—'}`; tip.append(l1);
+        const l2 = document.createElement('div'); l2.textContent = `Pacientes: ${o ? nf.format(o.g.pacientes) : '—'}`; tip.append(l2);
+        tip.hidden = false;
+        const r = box.getBoundingClientRect(); posTip(tip, box, ev.clientX - r.left, ev.clientY - r.top);
+      })
+      .on('mouseleave', () => { tip.hidden = true; })
+      .on('click', (ev, f) => abrirUF(f.properties.uf))
+      .on('keydown', (ev, f) => { if (ev.key === 'Enter') abrirUF(f.properties.uf); });
+    // sigla só onde cabe; cor do texto conforme a claridade do preenchimento
+    const corDe = (f) => { const o = porUf.get(f.properties.uf); return o && o.v != null && isFinite(o.v) && q ? q(o.v) : null; };
+    svg.selectAll('text.rot').data(fc.features.filter((f) => path.area(f) > 700)).join('text').attr('class', 'rot')
+      .attr('x', (f) => path.centroid(f)[0]).attr('y', (f) => path.centroid(f)[1]).attr('dy', '0.32em').attr('text-anchor', 'middle')
+      .attr('font-size', 10).attr('font-weight', 600).attr('pointer-events', 'none')
+      .attr('fill', (f) => { const c = corDe(f); return c && d3.lab(c).l < 60 ? '#ffffff' : '#1c2321'; })
+      .attr('opacity', 0.85).text((f) => f.properties.uf);
+    // legenda por faixas
+    const leg = sel('leg-mapa');
+    if (q) {
+      const cortes = [d3.min(vals), ...q.quantiles(), d3.max(vals)];
+      leg.replaceChildren(...q.range().map((cor, i) => { const s = document.createElement('span'); s.className = 'faixa'; const k = document.createElement('i'); k.style.background = cor; s.append(k, `${ind.fmt(cortes[i])} – ${ind.fmt(cortes[i + 1])}`); return s; }));
+    } else leg.replaceChildren();
+    const br = agrega(X.pm.get(X.ref)), popBr = d3.sum([...X.N.cap.values()], (c) => c.pop);
+    const vBr = ind.id === 'pmp' ? (br.pacientes / popBr) * 1e6 : ind.id === 'novos' ? (br.novos / popBr) * 1e6 : ind.f(br, null, X.pm.get(X.ref));
+    sel('nota-mapa').textContent = `${fmtMes(X.ref)} · Brasil: ${vBr != null && isFinite(vBr) ? ind.fmt(vBr) : '—'}. Clique num estado para abrir a visão dele.` + (['pmp', 'novos'].includes(ind.id) ? ' População: estimativa IBGE 2026; pacientes pela UF do estabelecimento.' : '');
   }
 
   function estab(X) {
